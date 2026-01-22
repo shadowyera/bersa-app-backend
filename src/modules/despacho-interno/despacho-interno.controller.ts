@@ -6,10 +6,18 @@ import {
   recibirDespachoInterno,
   listarDespachosInternos,
 } from './despacho-interno.service'
+
 import { DespachoInternoModel } from './despacho-interno.model'
 
 /* =====================================================
-   Despachar pedido interno preparado
+   DESPACHAR PEDIDO INTERNO PREPARADO
+   -----------------------------------------------------
+   Flujo:
+   - Se llama desde la sucursal ORIGEN (bodega / main)
+   - El pedido ya debe estar en estado PREPARADO
+   - Se crea un DespachoInterno asociado al pedido
+   - Se descuenta stock de la sucursal origen
+   - El despacho queda en estado DESPACHADO
 ===================================================== */
 export async function despacharPedidoController(
   req: Request,
@@ -24,21 +32,36 @@ export async function despacharPedidoController(
     res.status(201).json(despacho)
   } catch (error: any) {
     res.status(400).json({
-      message: error.message ?? 'Error al despachar pedido interno',
+      message:
+        error.message ??
+        'Error al despachar pedido interno',
     })
   }
 }
 
 /* =====================================================
-   Despacho manual / urgente (sin pedido)
+   CREAR DESPACHO MANUAL / URGENTE
+   -----------------------------------------------------
+   Flujo alternativo (sin pedido interno):
+   - Usado para emergencias o ajustes operativos
+   - No existe pedidoInternoId
+   - Se descuenta stock directamente
+   - El despacho queda en estado DESPACHADO
 ===================================================== */
 export async function crearDespachoManualController(
   req: Request,
   res: Response
 ) {
   try {
-    const { sucursalDestinoId, items, observacion } = req.body
+    const {
+      sucursalDestinoId,
+      items,
+      observacion,
+    } = req.body
 
+    /* -----------------------------
+       Validaciones mínimas
+    ------------------------------ */
     if (!sucursalDestinoId) {
       return res.status(400).json({
         message: 'Sucursal destino es requerida',
@@ -47,7 +70,8 @@ export async function crearDespachoManualController(
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
-        message: 'El despacho debe contener al menos un item',
+        message:
+          'El despacho debe contener al menos un item',
       })
     }
 
@@ -61,13 +85,22 @@ export async function crearDespachoManualController(
     res.status(201).json(despacho)
   } catch (error: any) {
     res.status(400).json({
-      message: error.message ?? 'Error al crear despacho manual',
+      message:
+        error.message ??
+        'Error al crear despacho manual',
     })
   }
 }
 
 /* =====================================================
-   Recepción de despacho
+   RECEPCIÓN DE DESPACHO
+   -----------------------------------------------------
+   Flujo:
+   - Se ejecuta desde la sucursal DESTINO
+   - El despacho debe estar en estado DESPACHADO
+   - Se registran cantidades recibidas
+   - Se ingresa stock en sucursal destino
+   - El despacho pasa a estado RECIBIDO
 ===================================================== */
 export async function recibirDespachoController(
   req: Request,
@@ -76,15 +109,19 @@ export async function recibirDespachoController(
   try {
     const { items, observacion } = req.body
 
-    if (!Array.isArray(items)) {
+    /* -----------------------------
+       Validaciones básicas
+    ------------------------------ */
+    if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
-        message: 'Items recibidos inválidos',
+        message:
+          'Debe indicar al menos un item recibido',
       })
     }
 
     await recibirDespachoInterno(
-      req.params.id,
-      req.user!.sucursalId,
+      req.params.id,           // despachoId
+      req.user!.sucursalId,    // sucursal destino
       items,
       observacion
     )
@@ -95,44 +132,72 @@ export async function recibirDespachoController(
     })
   } catch (error: any) {
     res.status(400).json({
-      message: error.message ?? 'Error al recibir despacho',
+      message:
+        error.message ??
+        'Error al recibir despacho',
     })
   }
 }
 
 /* =====================================================
-   Listar despachos internos
+   LISTAR DESPACHOS INTERNOS
+   -----------------------------------------------------
+   Comportamiento según rol / sucursal:
+   - Sucursal ORIGEN (MAIN): ve despachos salientes
+   - Sucursal DESTINO: ve despachos entrantes
+   - ADMIN: puede ver todos (según lógica del service)
 ===================================================== */
 export async function listarDespachosController(
   req: Request,
   res: Response
 ) {
-  const despachos = await listarDespachosInternos({
-    rol: req.user!.rol,
-    sucursalId: req.user!.sucursalId,
-  })
+  try {
+    const despachos = await listarDespachosInternos({
+      rol: req.user!.rol,
+      sucursalId: req.user!.sucursalId,
+    })
 
-  res.json(despachos)
+    res.json(despachos)
+  } catch (error: any) {
+    res.status(400).json({
+      message:
+        error.message ??
+        'Error al listar despachos',
+    })
+  }
 }
 
 /* =====================================================
-   Obtener despacho por ID
+   OBTENER DESPACHO POR ID
+   -----------------------------------------------------
+   Usado para:
+   - Ver detalle completo
+   - Pantallas de revisión / recepción
+   - Mostrar origen y destino con nombre
 ===================================================== */
 export async function getDespachoByIdController(
   req: Request,
   res: Response
 ) {
-  const despacho = await DespachoInternoModel.findById(
-    req.params.id
-  )
-    .populate('sucursalOrigenId', 'nombre')
-    .populate('sucursalDestinoId', 'nombre')
+  try {
+    const despacho = await DespachoInternoModel.findById(
+      req.params.id
+    )
+      .populate('sucursalOrigenId', 'nombre')
+      .populate('sucursalDestinoId', 'nombre')
 
-  if (!despacho) {
-    return res
-      .status(404)
-      .json({ message: 'Despacho no encontrado' })
+    if (!despacho) {
+      return res.status(404).json({
+        message: 'Despacho no encontrado',
+      })
+    }
+
+    res.json(despacho)
+  } catch (error: any) {
+    res.status(400).json({
+      message:
+        error.message ??
+        'Error al obtener despacho',
+    })
   }
-
-  res.json(despacho)
 }

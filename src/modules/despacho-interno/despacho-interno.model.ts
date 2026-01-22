@@ -36,7 +36,9 @@ const DespachoItemSchema = new Schema(
       min: 1,
     },
   },
-  { _id: false }
+  {
+    _id: false, // los items no necesitan _id propio
+  }
 )
 
 /* =====================================================
@@ -53,6 +55,7 @@ const DespachoInternoSchema = new Schema(
     pedidoInternoId: {
       type: Types.ObjectId,
       ref: 'PedidoInterno',
+      default: null,
     },
 
     /**
@@ -76,7 +79,10 @@ const DespachoInternoSchema = new Schema(
     },
 
     /**
-     * Estado del despacho
+     * Estado logístico del despacho
+     *
+     * Flujo normal:
+     * - DESPACHADO → RECIBIDO
      */
     estado: {
       type: String,
@@ -86,12 +92,26 @@ const DespachoInternoSchema = new Schema(
       index: true,
     },
 
+    /**
+     * Observación opcional ingresada
+     * al despachar o al recibir
+     */
+    observacion: {
+      type: String,
+      default: null,
+    },
+
+    /**
+     * Ítems despachados
+     */
     items: {
       type: [DespachoItemSchema],
       required: true,
       validate: {
-        validator: (items: unknown[]) => items.length > 0,
-        message: 'El despacho debe tener al menos un item',
+        validator: (items: unknown[]) =>
+          Array.isArray(items) && items.length > 0,
+        message:
+          'El despacho debe tener al menos un item',
       },
     },
   },

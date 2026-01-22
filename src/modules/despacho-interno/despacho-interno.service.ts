@@ -21,26 +21,45 @@ import {
 } from '../movimiento/movimiento.model'
 
 /* =====================================================
-   DESPACHO DESDE PEDIDO INTERNO
+   DESPACHAR PEDIDO INTERNO
+   -----------------------------------------------------
+   - Solo sucursal ORIGEN (abastecedora)
+   - Pedido debe estar PREPARADO
+   - Se crea DespachoInterno
+   - Se registra EGRESO en kardex
+   - Pedido pasa a DESPACHADO
 ===================================================== */
 export async function despacharPedidoInterno(
   pedidoInternoId: string,
   sucursalOrigenId: string
 ) {
-  const pedido = await PedidoInternoModel.findById(pedidoInternoId)
+  const pedido = await PedidoInternoModel.findById(
+    pedidoInternoId
+  )
 
   if (!pedido) {
     throw new Error('Pedido no encontrado')
   }
 
   if (pedido.estado !== ESTADO_PEDIDO_INTERNO.PREPARADO) {
-    throw new Error('El pedido no está preparado para despacho')
+    throw new Error(
+      'El pedido no está preparado para despacho'
+    )
   }
 
-  if (pedido.sucursalAbastecedoraId.toString() !== sucursalOrigenId) {
-    throw new Error('No autorizado para despachar este pedido')
+  if (
+    pedido.sucursalAbastecedoraId.toString() !==
+    sucursalOrigenId
+  ) {
+    throw new Error(
+      'No autorizado para despachar este pedido'
+    )
   }
 
+  /* -------------------------------
+     Construir items del despacho
+     Solo se despacha lo preparado
+  -------------------------------- */
   const itemsDespacho = pedido.items
     .map(item => {
       const cantidad = item.cantidadPreparada ?? 0
@@ -51,7 +70,8 @@ export async function despacharPedidoInterno(
         cantidadDespachada: cantidad,
         unidadPedido: item.unidadPedido,
         factorUnidad: item.factorUnidad,
-        cantidadBaseDespachada: cantidad * item.factorUnidad,
+        cantidadBaseDespachada:
+          cantidad * item.factorUnidad,
       }
     })
     .filter(Boolean) as {
@@ -63,27 +83,36 @@ export async function despacharPedidoInterno(
     }[]
 
   if (itemsDespacho.length === 0) {
-    throw new Error('No hay items preparados para despachar')
+    throw new Error(
+      'No hay items preparados para despachar'
+    )
   }
 
+  /* -------------------------------
+     Crear despacho
+  -------------------------------- */
   const despacho = await DespachoInternoModel.create({
     pedidoInternoId: pedido._id,
-    sucursalOrigenId: pedido.sucursalAbastecedoraId,
-    sucursalDestinoId: pedido.sucursalSolicitanteId,
+    sucursalOrigenId:
+      pedido.sucursalAbastecedoraId,
+    sucursalDestinoId:
+      pedido.sucursalSolicitanteId,
     estado: ESTADO_DESPACHO_INTERNO.DESPACHADO,
     items: itemsDespacho,
   })
 
-  /* ===============================
-     Kardex (EGRESO origen)
-  =============================== */
+  /* -------------------------------
+     Kardex – EGRESO (origen)
+  -------------------------------- */
   for (const item of itemsDespacho) {
     await registrarMovimiento({
       tipoMovimiento: TIPO_MOVIMIENTO.EGRESO,
-      subtipoMovimiento: SUBTIPO_MOVIMIENTO.TRANSFERENCIA_ENVIO,
+      subtipoMovimiento:
+        SUBTIPO_MOVIMIENTO.TRANSFERENCIA_ENVIO,
 
       productoId: item.productoId,
-      sucursalId: pedido.sucursalAbastecedoraId,
+      sucursalId:
+        pedido.sucursalAbastecedoraId,
 
       cantidad: item.cantidadBaseDespachada,
 
@@ -92,10 +121,14 @@ export async function despacharPedidoInterno(
         id: despacho._id,
       },
 
-      observacion: 'Despacho interno desde pedido',
+      observacion:
+        'Despacho interno desde pedido',
     })
   }
 
+  /* -------------------------------
+     Actualizar estado del pedido
+  -------------------------------- */
   pedido.estado = ESTADO_PEDIDO_INTERNO.DESPACHADO
   await pedido.save()
 
@@ -104,6 +137,10 @@ export async function despacharPedidoInterno(
 
 /* =====================================================
    DESPACHO MANUAL / URGENTE
+   -----------------------------------------------------
+   - No existe pedido interno
+   - Usado para emergencias
+   - Registra EGRESO directo
 ===================================================== */
 export async function crearDespachoManual(input: {
   sucursalOrigenId: string
@@ -125,7 +162,8 @@ export async function crearDespachoManual(input: {
     cantidadDespachada: item.cantidad,
     unidadPedido: item.unidadPedido,
     factorUnidad: item.factorUnidad,
-    cantidadBaseDespachada: item.cantidad * item.factorUnidad,
+    cantidadBaseDespachada:
+      item.cantidad * item.factorUnidad,
   }))
 
   const despacho = await DespachoInternoModel.create({
@@ -136,16 +174,19 @@ export async function crearDespachoManual(input: {
     items: itemsDespacho,
   })
 
-  /* ===============================
-     Kardex (EGRESO origen)
-  =============================== */
+  /* -------------------------------
+     Kardex – EGRESO (origen)
+  -------------------------------- */
   for (const item of itemsDespacho) {
     await registrarMovimiento({
       tipoMovimiento: TIPO_MOVIMIENTO.EGRESO,
-      subtipoMovimiento: SUBTIPO_MOVIMIENTO.TRANSFERENCIA_ENVIO,
+      subtipoMovimiento:
+        SUBTIPO_MOVIMIENTO.TRANSFERENCIA_ENVIO,
 
       productoId: item.productoId,
-      sucursalId: new Types.ObjectId(input.sucursalOrigenId),
+      sucursalId: new Types.ObjectId(
+        input.sucursalOrigenId
+      ),
 
       cantidad: item.cantidadBaseDespachada,
 
@@ -154,7 +195,9 @@ export async function crearDespachoManual(input: {
         id: despacho._id,
       },
 
-      observacion: input.observacion ?? 'Despacho interno manual',
+      observacion:
+        input.observacion ??
+        'Despacho interno manual',
     })
   }
 
@@ -162,7 +205,13 @@ export async function crearDespachoManual(input: {
 }
 
 /* =====================================================
-   RECEPCIÓN DE DESPACHO (SOLO KARDEX)
+   RECEPCIÓN DE DESPACHO
+   -----------------------------------------------------
+   MEJORAS IMPORTANTES:
+   - Validar estado DESPACHADO
+   - Registrar INGRESO en destino
+   - Marcar despacho como RECIBIDO
+   - Guardar observación
 ===================================================== */
 export async function recibirDespachoInterno(
   despachoId: string,
@@ -173,48 +222,83 @@ export async function recibirDespachoInterno(
   }[],
   observacion?: string
 ) {
-  const despacho = await DespachoInternoModel.findById(despachoId)
+  const despacho = await DespachoInternoModel.findById(
+    despachoId
+  )
 
   if (!despacho) {
     throw new Error('Despacho no encontrado')
   }
 
-  if (despacho.sucursalDestinoId.toString() !== sucursalDestinoId) {
-    throw new Error('No autorizado para recibir este despacho')
+  if (
+    despacho.estado !==
+    ESTADO_DESPACHO_INTERNO.DESPACHADO
+  ) {
+    throw new Error(
+      'El despacho no está disponible para recepción'
+    )
   }
 
+  if (
+    despacho.sucursalDestinoId.toString() !==
+    sucursalDestinoId
+  ) {
+    throw new Error(
+      'No autorizado para recibir este despacho'
+    )
+  }
+
+  /* -------------------------------
+     Kardex – INGRESO (destino)
+  -------------------------------- */
   for (const item of despacho.items) {
     const recibido = itemsRecibidos.find(
-      i => i.productoId === item.productoId.toString()
+      i =>
+        i.productoId ===
+        item.productoId.toString()
     )
 
-    const cantidadRecibida = recibido?.cantidadRecibida ?? 0
+    const cantidadRecibida =
+      recibido?.cantidadRecibida ?? 0
 
-    if (cantidadRecibida > 0) {
-      await registrarMovimiento({
-        tipoMovimiento: TIPO_MOVIMIENTO.INGRESO,
-        subtipoMovimiento: SUBTIPO_MOVIMIENTO.TRANSFERENCIA_RECEPCION,
+    if (cantidadRecibida <= 0) continue
 
-        productoId: item.productoId,
-        sucursalId: new Types.ObjectId(sucursalDestinoId),
+    await registrarMovimiento({
+      tipoMovimiento: TIPO_MOVIMIENTO.INGRESO,
+      subtipoMovimiento:
+        SUBTIPO_MOVIMIENTO.TRANSFERENCIA_RECEPCION,
 
-        cantidad: cantidadRecibida * item.factorUnidad,
+      productoId: item.productoId,
+      sucursalId: new Types.ObjectId(
+        sucursalDestinoId
+      ),
 
-        referencia: {
-          tipo: 'TRANSFERENCIA',
-          id: despacho._id,
-        },
+      cantidad:
+        cantidadRecibida * item.factorUnidad,
 
-        observacion: observacion ?? 'Recepción despacho interno',
-      })
-    }
+      referencia: {
+        tipo: 'TRANSFERENCIA',
+        id: despacho._id,
+      },
+
+      observacion:
+        observacion ??
+        'Recepción despacho interno',
+    })
   }
 
-  return { ok: true }
+  /* -------------------------------
+     Actualizar estado del despacho
+  -------------------------------- */
+  despacho.estado = ESTADO_DESPACHO_INTERNO.RECIBIDO
+  despacho.observacion = observacion
+  await despacho.save()
+
+  return despacho
 }
 
 /* =====================================================
-   LISTAR DESPACHOS
+   LISTAR DESPACHOS INTERNOS
 ===================================================== */
 export async function listarDespachosInternos(input: {
   rol: 'ADMIN' | 'BODEGUERO' | 'ENCARGADO'
@@ -229,11 +313,17 @@ export async function listarDespachosInternos(input: {
       .sort({ createdAt: -1 })
   }
 
-  const sucursal = await SucursalModel.findById(sucursalId)
+  const sucursal = await SucursalModel.findById(
+    sucursalId
+  )
+
   if (!sucursal) {
     throw new Error('Sucursal no encontrada')
   }
 
+  /* -------------------------------
+     Bodega principal: despachos salientes
+  -------------------------------- */
   if (rol === 'BODEGUERO' && sucursal.esPrincipal) {
     return DespachoInternoModel.find({
       sucursalOrigenId: sucursalId,
@@ -243,6 +333,9 @@ export async function listarDespachosInternos(input: {
       .sort({ createdAt: -1 })
   }
 
+  /* -------------------------------
+     Sucursal destino: despachos entrantes
+  -------------------------------- */
   return DespachoInternoModel.find({
     sucursalDestinoId: sucursalId,
   })

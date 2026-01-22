@@ -5,17 +5,23 @@
 /**
  * Estados posibles de un Despacho Interno.
  *
- * IMPORTANTE:
- * - El despacho representa el acto de ENVÍO.
- * - La recepción NO cambia este estado.
- * - La recepción se refleja exclusivamente vía Movimiento (kardex).
+ * Flujo normal:
+ * - DESPACHADO → RECIBIDO
+ *
+ * Notas:
+ * - El kardex registra el movimiento físico de stock.
+ * - El estado del despacho representa el ciclo logístico.
  */
 export const ESTADO_DESPACHO_INTERNO = {
+  /** Despacho enviado desde sucursal origen */
   DESPACHADO: 'DESPACHADO',
 
+  /** Despacho recibido en sucursal destino */
+  RECIBIDO: 'RECIBIDO',
+
   /**
-   * Anulado por error administrativo antes o después del registro,
-   * sin impacto en stock adicional.
+   * Despacho anulado por error administrativo.
+   * No debe generar movimientos adicionales de stock.
    */
   ANULADO: 'ANULADO',
 } as const
@@ -62,9 +68,13 @@ export interface DespachoInterno {
   /** Sucursal que recibe */
   sucursalDestinoId: string
 
+  /** Estado logístico del despacho */
   estado: EstadoDespachoInterno
 
   items: DespachoInternoItem[]
+
+  /** Observación ingresada al despachar o recibir */
+  observacion?: string | null
 
   createdAt: string
   updatedAt: string
