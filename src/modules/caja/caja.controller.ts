@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { CajaModel } from './caja.model'
-import { AperturaCajaModel, ESTADO_APERTURA_CAJA } from './aperturaCaja.model'
+import { AperturaCajaModel, ESTADO_APERTURA_CAJA } from './aperturaCaja/aperturaCaja.model'
 
 /* ================================
    Crear caja

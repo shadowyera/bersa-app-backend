@@ -1,13 +1,31 @@
 import { Request, Response } from 'express'
+
 import {
-  crearPedidoInterno,
+  editarPedidoInterno,
+  cancelarPedidoInterno,
   getPedidosPorSolicitante,
   getPedidosPorAbastecedora,
-  prepararPedidoInterno,
 } from './pedido-interno.service'
+
+import {
+  crearPedidoInternoUsecase,
+} from './crearPedidoInterno.usecase'
+
+import {
+  prepararPedidoInternoUsecase,
+} from './preparacion/prepararPedidoInterno.usecase'
+
+import {
+  serializePedidoInterno,
+  serializePedidosInternos,
+} from './pedido-interno.serializer'
 
 /* =====================================================
    Crear pedido interno
+   -----------------------------------------------------
+   - Sucursal DESTINO crea pedido
+   - Estado inicial: CREADO
+   - Emite PEDIDO_CREATED (realtime)
 ===================================================== */
 export async function crearPedido(
   req: Request,
@@ -24,20 +42,86 @@ export async function crearPedido(
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
-        message: 'El pedido debe contener al menos un item',
+        message:
+          'El pedido debe contener al menos un item',
       })
     }
 
-    const pedido = await crearPedidoInterno({
+    const pedido = await crearPedidoInternoUsecase({
       sucursalSolicitanteId: req.user!.sucursalId,
       sucursalAbastecedoraId,
       items,
+      usuarioId: req.user!._id,
     })
 
-    res.status(201).json(pedido)
+    return res
+      .status(201)
+      .json(serializePedidoInterno(pedido))
   } catch (error: any) {
-    res.status(400).json({
-      message: error.message ?? 'Error al crear pedido interno',
+    return res.status(400).json({
+      message:
+        error.message ??
+        'Error al crear pedido interno',
+    })
+  }
+}
+
+/* =====================================================
+   Editar pedido interno
+===================================================== */
+export async function editarPedido(
+  req: Request,
+  res: Response
+) {
+  try {
+    const { items } = req.body
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        message:
+          'El pedido debe contener al menos un item',
+      })
+    }
+
+    const pedido = await editarPedidoInterno(
+      req.params.id,
+      req.user!.sucursalId,
+      items
+    )
+
+    return res.json(
+      serializePedidoInterno(pedido)
+    )
+  } catch (error: any) {
+    return res.status(400).json({
+      message:
+        error.message ??
+        'Error al editar pedido interno',
+    })
+  }
+}
+
+/* =====================================================
+   Cancelar pedido interno
+===================================================== */
+export async function cancelarPedido(
+  req: Request,
+  res: Response
+) {
+  try {
+    const pedido = await cancelarPedidoInterno(
+      req.params.id,
+      req.user!.sucursalId
+    )
+
+    return res.json(
+      serializePedidoInterno(pedido)
+    )
+  } catch (error: any) {
+    return res.status(400).json({
+      message:
+        error.message ??
+        'Error al cancelar pedido interno',
     })
   }
 }
@@ -54,10 +138,14 @@ export async function listarPedidosPropios(
       req.user!.sucursalId
     )
 
-    res.json(pedidos)
+    return res.json(
+      serializePedidosInternos(pedidos)
+    )
   } catch (error: any) {
-    res.status(400).json({
-      message: error.message ?? 'Error al listar pedidos propios',
+    return res.status(400).json({
+      message:
+        error.message ??
+        'Error al listar pedidos propios',
     })
   }
 }
@@ -74,10 +162,14 @@ export async function listarPedidosRecibidos(
       req.user!.sucursalId
     )
 
-    res.json(pedidos)
+    return res.json(
+      serializePedidosInternos(pedidos)
+    )
   } catch (error: any) {
-    res.status(400).json({
-      message: error.message ?? 'Error al listar pedidos recibidos',
+    return res.status(400).json({
+      message:
+        error.message ??
+        'Error al listar pedidos recibidos',
     })
   }
 }
@@ -98,16 +190,21 @@ export async function prepararPedido(
       })
     }
 
-    const pedido = await prepararPedidoInterno(
-      req.params.id,
-      items,
-      req.user!.sucursalId
-    )
+    const pedido = await prepararPedidoInternoUsecase({
+      pedidoId: req.params.id,
+      itemsPreparados: items,
+      sucursalAbastecedoraId: req.user!.sucursalId,
+      usuarioId: req.user!._id,
+    })
 
-    res.json(pedido)
+    return res.json(
+      serializePedidoInterno(pedido)
+    )
   } catch (error: any) {
-    res.status(400).json({
-      message: error.message ?? 'Error al preparar pedido',
+    return res.status(400).json({
+      message:
+        error.message ??
+        'Error al preparar pedido',
     })
   }
 }

@@ -32,6 +32,10 @@ export const abrirCajaController = async (
       cajaId: new Types.ObjectId(cajaId),
       sucursalId: new Types.ObjectId(user.sucursalId),
       usuarioId: new Types.ObjectId(user._id),
+
+      // 👇 CONTEXTO HUMANO DESDE JWT (CLAVE)
+      usuarioNombre: user.nombre,
+
       montoInicial: Number(montoInicial),
     })
 

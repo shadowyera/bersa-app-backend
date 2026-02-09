@@ -2,7 +2,7 @@ import { Types } from 'mongoose'
 import {
   AperturaCajaModel,
   ESTADO_APERTURA_CAJA,
-} from './aperturaCaja.model'
+} from '../aperturaCaja/aperturaCaja.model'
 import { calcularResumenCaja } from './cierreCaja.calculo'
 
 export const cerrarCajaAutomatico = async ({

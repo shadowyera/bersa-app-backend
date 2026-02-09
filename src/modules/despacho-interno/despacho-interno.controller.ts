@@ -1,190 +1,228 @@
 import { Request, Response } from 'express'
+import { Types } from 'mongoose'
 
-import {
-  despacharPedidoInterno,
-  crearDespachoManual,
-  recibirDespachoInterno,
-  listarDespachosInternos,
-} from './despacho-interno.service'
+/* =====================================================
+   Services
+===================================================== */
+import { crearDespachoInterno } from './despacho-interno.service'
 
+/* =====================================================
+   Model (solo lectura)
+===================================================== */
 import { DespachoInternoModel } from './despacho-interno.model'
 
 /* =====================================================
-   DESPACHAR PEDIDO INTERNO PREPARADO
-   -----------------------------------------------------
-   Flujo:
-   - Se llama desde la sucursal ORIGEN (bodega / main)
-   - El pedido ya debe estar en estado PREPARADO
-   - Se crea un DespachoInterno asociado al pedido
-   - Se descuenta stock de la sucursal origen
-   - El despacho queda en estado DESPACHADO
+   Types
 ===================================================== */
-export async function despacharPedidoController(
-  req: Request,
-  res: Response
-) {
-  try {
-    const despacho = await despacharPedidoInterno(
-      req.params.pedidoId,
-      req.user!.sucursalId
-    )
-
-    res.status(201).json(despacho)
-  } catch (error: any) {
-    res.status(400).json({
-      message:
-        error.message ??
-        'Error al despachar pedido interno',
-    })
-  }
-}
+import {
+  ORIGEN_DESPACHO_INTERNO,
+} from './despacho-interno.types'
 
 /* =====================================================
-   CREAR DESPACHO MANUAL / URGENTE
-   -----------------------------------------------------
-   Flujo alternativo (sin pedido interno):
-   - Usado para emergencias o ajustes operativos
-   - No existe pedidoInternoId
-   - Se descuenta stock directamente
-   - El despacho queda en estado DESPACHADO
+   CREAR DESPACHO INTERNO
+   - Desde PEDIDO (con o sin suplentes)
+   - DIRECTO
 ===================================================== */
-export async function crearDespachoManualController(
+export async function crearDespachoInternoController(
   req: Request,
   res: Response
 ) {
   try {
     const {
+      origen,
+      pedidoIds,
+      itemsSuplentes,
       sucursalDestinoId,
       items,
-      observacion,
     } = req.body
 
-    /* -----------------------------
-       Validaciones mínimas
-    ------------------------------ */
-    if (!sucursalDestinoId) {
+    /* ===============================
+       Validación común
+    =============================== */
+
+    if (
+      !Object.values(ORIGEN_DESPACHO_INTERNO).includes(origen)
+    ) {
       return res.status(400).json({
-        message: 'Sucursal destino es requerida',
+        message: 'Origen de despacho inválido',
       })
     }
 
-    if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({
-        message:
-          'El despacho debe contener al menos un item',
+    /* =================================================
+       DESPACHO DESDE PEDIDO
+    ================================================= */
+    if (origen === ORIGEN_DESPACHO_INTERNO.PEDIDO) {
+      if (
+        !Array.isArray(pedidoIds) ||
+        pedidoIds.length === 0
+      ) {
+        return res.status(400).json({
+          message:
+            'Debe enviar al menos un pedidoId',
+        })
+      }
+
+      for (const id of pedidoIds) {
+        if (!Types.ObjectId.isValid(id)) {
+          return res.status(400).json({
+            message: `pedidoId inválido: ${id}`,
+          })
+        }
+      }
+
+      if (itemsSuplentes) {
+        if (!Array.isArray(itemsSuplentes)) {
+          return res.status(400).json({
+            message:
+              'itemsSuplentes debe ser un arreglo',
+          })
+        }
+
+        for (const item of itemsSuplentes) {
+          if (
+            !Types.ObjectId.isValid(item.productoId) ||
+            typeof item.cantidad !== 'number' ||
+            item.cantidad <= 0
+          ) {
+            return res.status(400).json({
+              message:
+                'Item suplente inválido',
+            })
+          }
+        }
+      }
+
+      const despacho = await crearDespachoInterno({
+        origen: ORIGEN_DESPACHO_INTERNO.PEDIDO,
+        pedidoIds,
+        itemsSuplentes,
+        sucursalOrigenId: req.user!.sucursalId,
+        usuarioId: req.user!._id,
+      })
+
+      return res.status(201).json({
+        ok: true,
+        data: despacho,
       })
     }
 
-    const despacho = await crearDespachoManual({
-      sucursalOrigenId: req.user!.sucursalId,
-      sucursalDestinoId,
-      items,
-      observacion,
+    /* =================================================
+       DESPACHO DIRECTO
+    ================================================= */
+    if (origen === ORIGEN_DESPACHO_INTERNO.DIRECTO) {
+      if (
+        !Types.ObjectId.isValid(sucursalDestinoId)
+      ) {
+        return res.status(400).json({
+          message:
+            'sucursalDestinoId inválido',
+        })
+      }
+
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({
+          message:
+            'Despacho directo debe tener items',
+        })
+      }
+
+      for (const item of items) {
+        if (
+          !Types.ObjectId.isValid(item.productoId) ||
+          typeof item.cantidad !== 'number' ||
+          item.cantidad <= 0
+        ) {
+          return res.status(400).json({
+            message:
+              'Item de despacho directo inválido',
+          })
+        }
+      }
+
+      const despacho = await crearDespachoInterno({
+        origen: ORIGEN_DESPACHO_INTERNO.DIRECTO,
+        sucursalOrigenId: req.user!.sucursalId,
+        sucursalDestinoId,
+        usuarioId: req.user!._id,
+        items,
+      })
+
+      return res.status(201).json({
+        ok: true,
+        data: despacho,
+      })
+    }
+
+    return res.status(400).json({
+      message: 'Payload de despacho inválido',
     })
-
-    res.status(201).json(despacho)
   } catch (error: any) {
-    res.status(400).json({
+    return res.status(400).json({
       message:
-        error.message ??
-        'Error al crear despacho manual',
-    })
-  }
-}
-
-/* =====================================================
-   RECEPCIÓN DE DESPACHO
-   -----------------------------------------------------
-   Flujo:
-   - Se ejecuta desde la sucursal DESTINO
-   - El despacho debe estar en estado DESPACHADO
-   - Se registran cantidades recibidas
-   - Se ingresa stock en sucursal destino
-   - El despacho pasa a estado RECIBIDO
-===================================================== */
-export async function recibirDespachoController(
-  req: Request,
-  res: Response
-) {
-  try {
-    const { items, observacion } = req.body
-
-    /* -----------------------------
-       Validaciones básicas
-    ------------------------------ */
-    if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({
-        message:
-          'Debe indicar al menos un item recibido',
-      })
-    }
-
-    await recibirDespachoInterno(
-      req.params.id,           // despachoId
-      req.user!.sucursalId,    // sucursal destino
-      items,
-      observacion
-    )
-
-    res.json({
-      ok: true,
-      message: 'Despacho recibido correctamente',
-    })
-  } catch (error: any) {
-    res.status(400).json({
-      message:
-        error.message ??
-        'Error al recibir despacho',
+        error?.message ??
+        'Error al crear despacho interno',
     })
   }
 }
 
 /* =====================================================
    LISTAR DESPACHOS INTERNOS
-   -----------------------------------------------------
-   Comportamiento según rol / sucursal:
-   - Sucursal ORIGEN (MAIN): ve despachos salientes
-   - Sucursal DESTINO: ve despachos entrantes
-   - ADMIN: puede ver todos (según lógica del service)
 ===================================================== */
-export async function listarDespachosController(
+export async function listarDespachosInternosController(
   req: Request,
   res: Response
 ) {
   try {
-    const despachos = await listarDespachosInternos({
-      rol: req.user!.rol,
-      sucursalId: req.user!.sucursalId,
-    })
+    const filter: any = {
+      sucursalOrigenId: req.user!.sucursalId,
+    }
 
-    res.json(despachos)
-  } catch (error: any) {
-    res.status(400).json({
+    const page = Number(req.query.page ?? 1)
+    const limit = Number(req.query.limit ?? 10)
+    const skip = (page - 1) * limit
+
+    const [despachos, total] = await Promise.all([
+      DespachoInternoModel.find(filter)
+        .sort({ creadoEn: -1 })
+        .skip(skip)
+        .limit(limit),
+
+      DespachoInternoModel.countDocuments(filter),
+    ])
+
+    return res.status(200).json({
+      data: despachos,
+      total,
+      page,
+      limit,
+    })
+  } catch (error) {
+    return res.status(500).json({
       message:
-        error.message ??
-        'Error al listar despachos',
+        'Error al listar despachos internos',
     })
   }
 }
 
 /* =====================================================
-   OBTENER DESPACHO POR ID
-   -----------------------------------------------------
-   Usado para:
-   - Ver detalle completo
-   - Pantallas de revisión / recepción
-   - Mostrar origen y destino con nombre
+   OBTENER DESPACHO INTERNO POR ID
 ===================================================== */
-export async function getDespachoByIdController(
+export async function getDespachoInternoByIdController(
   req: Request,
   res: Response
 ) {
   try {
+    const { id } = req.params
+
+    if (!Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        message: 'ID de despacho inválido',
+      })
+    }
+
     const despacho = await DespachoInternoModel.findById(
-      req.params.id
+      id
     )
-      .populate('sucursalOrigenId', 'nombre')
-      .populate('sucursalDestinoId', 'nombre')
 
     if (!despacho) {
       return res.status(404).json({
@@ -192,12 +230,23 @@ export async function getDespachoByIdController(
       })
     }
 
-    res.json(despacho)
+    if (
+      despacho.sucursalOrigenId.toString() !==
+      req.user!.sucursalId
+    ) {
+      return res.status(403).json({
+        message: 'No autorizado',
+      })
+    }
+
+    return res.status(200).json({
+      data: despacho,
+    })
   } catch (error: any) {
-    res.status(400).json({
+    return res.status(500).json({
       message:
-        error.message ??
-        'Error al obtener despacho',
+        error?.message ??
+        'Error al obtener despacho interno',
     })
   }
 }

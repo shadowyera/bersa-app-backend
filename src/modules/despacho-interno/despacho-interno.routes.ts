@@ -1,10 +1,8 @@
 import { Router } from 'express'
 import {
-  despacharPedidoController,
-  recibirDespachoController,
-  crearDespachoManualController,
-  listarDespachosController,
-  getDespachoByIdController,
+  crearDespachoInternoController,
+  listarDespachosInternosController,
+  getDespachoInternoByIdController,
 } from './despacho-interno.controller'
 import { requireRole } from '../auth/requireRole'
 
@@ -16,43 +14,28 @@ const router = Router()
 router.get(
   '/api/despachos-internos',
   requireRole(['ADMIN', 'BODEGUERO', 'ENCARGADO']),
-  listarDespachosController
+  listarDespachosInternosController
 )
 
 /* =====================================================
-   Obtener despacho por ID
+   OBTENER despacho interno por ID
 ===================================================== */
 router.get(
   '/api/despachos-internos/:id',
   requireRole(['ADMIN', 'BODEGUERO', 'ENCARGADO']),
-  getDespachoByIdController
+  getDespachoInternoByIdController
 )
 
 /* =====================================================
-   Despachar desde pedido
+   CREAR despacho interno
+   - PEDIDO
+   - PEDIDO + SUPLENTE
+   - DIRECTO
 ===================================================== */
 router.post(
-  '/api/despachos-internos/desde-pedido/:pedidoId',
-  requireRole(['BODEGUERO', 'ADMIN']),
-  despacharPedidoController
-)
-
-/* =====================================================
-   Despacho manual
-===================================================== */
-router.post(
-  '/api/despachos-internos/manual',
-  requireRole(['BODEGUERO', 'ADMIN']),
-  crearDespachoManualController
-)
-
-/* =====================================================
-   Recepción de despacho
-===================================================== */
-router.post(
-  '/api/despachos-internos/:id/recibir',
-  requireRole(['ENCARGADO', 'ADMIN']),
-  recibirDespachoController
+  '/api/despachos-internos',
+  requireRole(['ADMIN', 'BODEGUERO']),
+  crearDespachoInternoController
 )
 
 export default router

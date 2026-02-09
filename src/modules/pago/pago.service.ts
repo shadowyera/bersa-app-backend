@@ -5,7 +5,7 @@ import { TIPO_PAGO } from '../../shared/enums/tipoPago.enum';
 import {
   AperturaCajaModel,
   ESTADO_APERTURA_CAJA,
-} from '../caja/aperturaCaja.model';
+} from '../caja/aperturaCaja/aperturaCaja.model';
 
 interface CrearPagoInput {
   ventaId: Types.ObjectId;

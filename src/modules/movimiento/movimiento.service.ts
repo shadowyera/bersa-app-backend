@@ -4,6 +4,7 @@ import {
   MovimientoModel,
   TIPO_MOVIMIENTO,
   SUBTIPO_MOVIMIENTO,
+  REFERENCIA_MOVIMIENTO,
 } from './movimiento.model'
 
 interface RegistrarMovimientoInput {
@@ -13,10 +14,11 @@ interface RegistrarMovimientoInput {
   productoId: Types.ObjectId
   sucursalId: Types.ObjectId
 
+  /** Cantidad SIEMPRE positiva (unidad base) */
   cantidad: number
 
   referencia?: {
-    tipo: 'VENTA' | 'TRANSFERENCIA' | 'AJUSTE' | 'COMPRA'
+    tipo: REFERENCIA_MOVIMIENTO
     id: Types.ObjectId
   }
 
@@ -59,9 +61,14 @@ export const registrarMovimiento = async (
     )
   }
 
-  // 🚫 Este sí se mantiene: no se puede vender si está deshabilitado
+  /**
+   * Regla 2026:
+   * - Solo VENTA bloquea por habilitado
+   * - Despachos internos, ajustes y compras NO
+   */
   if (
     tipoMovimiento === TIPO_MOVIMIENTO.EGRESO &&
+    subtipoMovimiento === SUBTIPO_MOVIMIENTO.VENTA_POS &&
     !stock.habilitado
   ) {
     throw new Error(
@@ -81,15 +88,16 @@ export const registrarMovimiento = async (
       : saldoAnterior - cantidad
 
   /* ================================
-     4. PERMITIR stock negativo
+     4. Stock negativo permitido
   ================================ */
 
   if (saldoPosterior < 0) {
     console.warn(
-      `Stock negativo permitido. Producto=${productoId.toString()} ` +
-      `Sucursal=${sucursalId.toString()} ` +
-      `Anterior=${saldoAnterior} ` +
-      `Movimiento=${cantidad}`
+      `[KARDEX] Stock negativo permitido | ` +
+        `Producto=${productoId.toString()} | ` +
+        `Sucursal=${sucursalId.toString()} | ` +
+        `Anterior=${saldoAnterior} | ` +
+        `Movimiento=${cantidad}`
     )
   }
 
@@ -111,7 +119,7 @@ export const registrarMovimiento = async (
   })
 
   /* ================================
-     6. Actualizar stock
+     6. Actualizar stock derivado
   ================================ */
 
   stock.cantidad = saldoPosterior
@@ -129,5 +137,6 @@ export const registrarMovimiento = async (
     cantidad,
     tipoMovimiento,
     subtipoMovimiento,
+    referencia,
   }
 }

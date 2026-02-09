@@ -17,15 +17,16 @@ import movimientoRoutes from './modules/movimiento/movimiento.routes'
 import stockRoutes from './modules/stock/stock.routes'
 import ventaRoutes from './modules/venta/venta.routes'
 import cajaRoutes from './modules/caja/caja.routes'
-import aperturaCajaRoutes from './modules/caja/aperturaCaja.routes'
-import cierreCajaRoutes from './modules/caja/cierreCaja.routes'
-import corteCajaRoutes from './modules/caja/corteCaja.routes'
+import aperturaCajaRoutes from './modules/caja/aperturaCaja/aperturaCaja.routes'
+import cierreCajaRoutes from './modules/caja/cierreCaja/cierreCaja.routes'
+import corteCajaRoutes from './modules/caja/corteCaja/corteCaja.routes'
 import pagoRoutes from './modules/pago/pago.routes'
 import proveedorRoutes from './modules/proveedor/proveedor.routes'
 import realtimeRoutes from './modules/realtime/realtime.routes'
 import abastecimientoRoutes from './modules/abastecimiento/abastecimiento.routes'
 import pedidoInternoRoutes from './modules/pedido-interno/pedido-interno.routes'
 import despachoInternoRoutes from './modules/despacho-interno/despacho-interno.routes'
+import aperturasActivasRoutes from './modules/caja/queries/aperturasActivas.routes'
 
 dotenv.config()
 
@@ -92,6 +93,7 @@ app.use(cajaRoutes)
 app.use(aperturaCajaRoutes)
 app.use(cierreCajaRoutes)
 app.use(corteCajaRoutes)
+app.use(aperturasActivasRoutes)
 app.use(pagoRoutes)
 app.use(proveedorRoutes)
 app.use(abastecimientoRoutes)

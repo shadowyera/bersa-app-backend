@@ -1,19 +1,22 @@
-import { Request, Response } from 'express';
-import { Types } from 'mongoose';
-import {
-  registrarMovimiento,
-} from './movimiento.service';
+import { Request, Response } from 'express'
+import { Types } from 'mongoose'
+
+import { registrarMovimiento } from './movimiento.service'
 import {
   TIPO_MOVIMIENTO,
   SUBTIPO_MOVIMIENTO,
+  REFERENCIA_MOVIMIENTO,
   MovimientoModel,
-} from './movimiento.model';
+} from './movimiento.model'
 
-/**
- * POST /api/movimientos
- * Registra un movimiento de inventario (Kardex)
- */
-export const createMovimiento = async (req: Request, res: Response) => {
+/* =====================================================
+   POST /api/movimientos
+   Registrar movimiento de Kardex
+===================================================== */
+export const createMovimiento = async (
+  req: Request,
+  res: Response
+) => {
   try {
     const {
       tipoMovimiento,
@@ -23,27 +26,75 @@ export const createMovimiento = async (req: Request, res: Response) => {
       cantidad,
       referencia,
       observacion,
-    } = req.body;
+    } = req.body
 
-    // ================================
-    // Validaciones mínimas de entrada
-    // ================================
+    /* ================================
+       Validaciones básicas de input
+    ================================ */
 
     if (
       !tipoMovimiento ||
       !subtipoMovimiento ||
       !productoId ||
       !sucursalId ||
-      !cantidad
+      cantidad === undefined
     ) {
       return res.status(400).json({
         message: 'Faltan datos obligatorios',
-      });
+      })
     }
 
-    // ================================
-    // Llamada al service (lógica real)
-    // ================================
+    if (!Object.values(TIPO_MOVIMIENTO).includes(tipoMovimiento)) {
+      return res.status(400).json({
+        message: 'tipoMovimiento inválido',
+      })
+    }
+
+    if (!Object.values(SUBTIPO_MOVIMIENTO).includes(subtipoMovimiento)) {
+      return res.status(400).json({
+        message: 'subtipoMovimiento inválido',
+      })
+    }
+
+    if (!Types.ObjectId.isValid(productoId)) {
+      return res.status(400).json({
+        message: 'productoId inválido',
+      })
+    }
+
+    if (!Types.ObjectId.isValid(sucursalId)) {
+      return res.status(400).json({
+        message: 'sucursalId inválido',
+      })
+    }
+
+    if (typeof cantidad !== 'number' || cantidad <= 0) {
+      return res.status(400).json({
+        message: 'cantidad inválida',
+      })
+    }
+
+    if (referencia) {
+      if (
+        !Object.values(REFERENCIA_MOVIMIENTO).includes(
+          referencia.tipo
+        )
+      ) {
+        return res.status(400).json({
+          message: 'referencia.tipo inválido',
+        })
+      }
+
+      if (!Types.ObjectId.isValid(referencia.id)) {
+        return res.status(400).json({
+          message: 'referencia.id inválido',
+        })
+      }
+    }
+
+    /* ================================
+       Llamada al service (dominio)
+    ================================ */
 
     const resultado = await registrarMovimiento({
       tipoMovimiento,
@@ -58,32 +109,37 @@ export const createMovimiento = async (req: Request, res: Response) => {
           }
         : undefined,
       observacion,
-    });
+    })
 
-    // ================================
-    // Respuesta OK
-    // ================================
+    /* ================================
+       Respuesta OK
+    ================================ */
 
     return res.status(201).json({
       message: 'Movimiento registrado correctamente',
       data: resultado,
-    });
+    })
   } catch (error: any) {
-    // ================================
-    // Manejo de errores controlado
-    // ================================
-
     return res.status(400).json({
-      message: error.message || 'Error al registrar movimiento',
-    });
+      message:
+        error?.message ??
+        'Error al registrar movimiento',
+    })
   }
-};
+}
 
-export const getMovimientos = async (req: Request, res: Response) => {
+/* =====================================================
+   GET /api/movimientos
+   Listar movimientos (Kardex)
+===================================================== */
+export const getMovimientos = async (
+  req: Request,
+  res: Response
+) => {
   try {
     const filter: any = {}
 
-    // filtros
+    // filtros por params
     if (req.params.productoId) {
       filter.productoId = req.params.productoId
     }
@@ -92,29 +148,29 @@ export const getMovimientos = async (req: Request, res: Response) => {
       filter.sucursalId = req.params.sucursalId
     }
 
-    // query params
+    // paginación
     const page = Number(req.query.page ?? 1)
     const limit = Number(req.query.limit ?? 10)
     const skip = (page - 1) * limit
 
-    // query principal
-    const [movimientos, total] = await Promise.all([
-      MovimientoModel.find(filter)
-        .sort({ fecha: -1 }) // 👈 MÁS NUEVO PRIMERO
-        .skip(skip)
-        .limit(limit),
+    const [movimientos, total] =
+      await Promise.all([
+        MovimientoModel.find(filter)
+          .sort({ fecha: -1 }) // más nuevo primero
+          .skip(skip)
+          .limit(limit),
 
-      MovimientoModel.countDocuments(filter),
-    ])
+        MovimientoModel.countDocuments(filter),
+      ])
 
-    res.json({
+    return res.json({
       data: movimientos,
       total,
       page,
       limit,
     })
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       message: 'Error al obtener movimientos',
     })
   }

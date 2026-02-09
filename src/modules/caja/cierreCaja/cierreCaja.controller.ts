@@ -1,12 +1,8 @@
 import { Request, Response } from 'express'
 import { Types } from 'mongoose'
-import { cerrarCajaAutomatico } from './cierreCaja.service'
+import { cerrarCajaAutomaticoApp } from './cierreCaja.usecase'
 import { calcularResumenCaja } from './cierreCaja.calculo'
-import { emitRealtimeEvent } from '../realtime/realtime.service'
 
-/**
- * POST /api/cajas/:cajaId/cerrar-automatico
- */
 export const cerrarCajaController = async (
   req: Request,
   res: Response
@@ -21,23 +17,16 @@ export const cerrarCajaController = async (
     const { montoFinal } = req.body
 
     if (!Types.ObjectId.isValid(cajaId)) {
-      return res
-        .status(400)
-        .json({ message: 'CajaId inválido' })
+      return res.status(400).json({ message: 'CajaId inválido' })
     }
 
-    const resumen = await cerrarCajaAutomatico({
+    const resumen = await cerrarCajaAutomaticoApp({
       cajaId: new Types.ObjectId(cajaId),
       montoFinal: Number(montoFinal),
       usuarioId: new Types.ObjectId(user._id),
       rol: user.rol,
-    })
-
-    // 🔔 AVISO EN TIEMPO REAL
-    emitRealtimeEvent({
-      type: 'CAJA_CERRADA',
-      sucursalId: user.sucursalId,
-      cajaId,
+      sucursalId: new Types.ObjectId(user.sucursalId),
+      usuarioNombre: user.nombre,
     })
 
     res.json(resumen)
@@ -46,9 +35,6 @@ export const cerrarCajaController = async (
   }
 }
 
-/**
- * GET /api/cajas/:cajaId/resumen-previo
- */
 export const resumenPrevioCajaController = async (
   req: Request,
   res: Response
@@ -57,9 +43,7 @@ export const resumenPrevioCajaController = async (
     const { cajaId } = req.params
 
     if (!Types.ObjectId.isValid(cajaId)) {
-      return res
-        .status(400)
-        .json({ message: 'CajaId inválido' })
+      return res.status(400).json({ message: 'CajaId inválido' })
     }
 
     const resumen = await calcularResumenCaja(

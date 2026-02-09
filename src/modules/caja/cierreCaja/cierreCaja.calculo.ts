@@ -2,9 +2,9 @@ import { Types } from 'mongoose'
 import {
   AperturaCajaModel,
   ESTADO_APERTURA_CAJA,
-} from './aperturaCaja.model'
-import { PagoModel } from '../pago/pago.model'
-import { VentaModel } from '../venta/venta.model'
+} from '../aperturaCaja/aperturaCaja.model'
+import { PagoModel } from '../../pago/pago.model'
+import { VentaModel } from '../../venta/venta.model'
 
 export const calcularResumenCaja = async (cajaId: Types.ObjectId) => {
   const apertura = await AperturaCajaModel.findOne({

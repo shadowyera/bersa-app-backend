@@ -1,13 +1,11 @@
-import { ROL_USUARIO } from '../users/usuario.model'
+import { AuthenticatedUser } from '@/modules/auth/auth.types'
 
 declare global {
   namespace Express {
     interface Request {
-      user?: {
-        _id: string
-        rol: ROL_USUARIO
-        sucursalId: string
-      }
+      user?: AuthenticatedUser
     }
   }
 }
+
+export {}

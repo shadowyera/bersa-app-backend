@@ -1,21 +1,32 @@
-import { Router } from 'express'
+import { Router, Request, Response } from 'express'
 import { registerSSEClient } from './realtime.service'
 import { authMiddleware } from '../auth/auth.middleware'
 
 const router = Router()
 
 /**
- * SSE para eventos de caja por sucursal
- * GET /api/realtime/cajas
+ * GET /api/realtime
  */
-router.get('/', authMiddleware, (req, res) => {
-  const sucursalId = req.user?.sucursalId
+router.get(
+  '/',
+  authMiddleware,
+  (req: Request, res: Response) => {
+    const sucursalId = req.user?.sucursalId
 
-  if (!sucursalId) {
-    return res.status(400).json({ message: 'Sucursal no encontrada' })
+    if (!sucursalId) {
+      return res
+        .status(400)
+        .json({ message: 'Sucursal no encontrada' })
+    }
+
+    // 🔥 FIX CLAVE:
+    // SIEMPRE registrar con STRING
+    registerSSEClient(
+      req,
+      res,
+      sucursalId.toString()
+    )
   }
-
-  registerSSEClient(req, res, sucursalId)
-})
+)
 
 export default router

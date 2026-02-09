@@ -7,22 +7,32 @@ import { crearVentaPOS } from './venta.service'
  * CREAR VENTA POS
  * ================================
  */
-export const createVentaPOS = async (req: Request, res: Response) => {
+export const createVentaPOS = async (
+  req: Request,
+  res: Response
+) => {
   try {
     const user = req.user
     if (!user) {
-      return res.status(401).json({ message: 'No autenticado' })
+      return res
+        .status(401)
+        .json({ message: 'No autenticado' })
     }
 
-    const { cajaId, aperturaCajaId, items, pagos, ajusteRedondeo } = req.body
+    const { cajaId, aperturaCajaId, items, pagos } =
+      req.body
 
     if (!cajaId || !aperturaCajaId || !items || !pagos) {
-      return res.status(400).json({ message: 'Datos incompletos' })
+      return res
+        .status(400)
+        .json({ message: 'Datos incompletos' })
     }
 
     const venta = await crearVentaPOS({
       cajaId: new Types.ObjectId(cajaId),
-      aperturaCajaId: new Types.ObjectId(aperturaCajaId),
+      aperturaCajaId: new Types.ObjectId(
+        aperturaCajaId
+      ),
       usuarioId: new Types.ObjectId(user._id),
       items: items.map((i: any) => ({
         productoId: new Types.ObjectId(i.productoId),
@@ -30,11 +40,12 @@ export const createVentaPOS = async (req: Request, res: Response) => {
         precioUnitario: i.precioUnitario,
       })),
       pagos,
-      ajusteRedondeo: Number(ajusteRedondeo || 0),
     })
 
     return res.status(201).json(venta)
   } catch (e: any) {
-    return res.status(400).json({ message: e.message })
+    return res
+      .status(400)
+      .json({ message: e.message })
   }
 }

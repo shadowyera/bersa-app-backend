@@ -1,28 +1,52 @@
+/**
+ * Tipos de eventos en tiempo real
+ * Importante:
+ * - Son CONTRATOS frontend ↔ backend
+ * - No deben romperse sin versionado
+ */
 export type RealtimeEventType =
-  // Caja
+  // 🧾 Caja
   | 'CAJA_ABIERTA'
   | 'CAJA_CERRADA'
 
-  // Catálogo productos
+  // 📦 Catálogo
   | 'PRODUCTO_CREATED'
   | 'PRODUCTO_UPDATED'
   | 'PRODUCTO_DELETED'
+
+  // 📝 Pedidos internos
+  | 'PEDIDO_CREATED'
+  | 'PEDIDO_UPDATED'
+  | 'PEDIDO_PREPARADO'
+  | 'PEDIDO_DESPACHADO'
+
+  // 🚚 Despachos
+  | 'DESPACHO_CREATED'
+  | 'DESPACHO_UPDATED'
+  | 'DESPACHO_CERRADO'
 
 export interface RealtimeEventPayload {
   type: RealtimeEventType
 
   /**
-   * - sucursalId real → eventos por sucursal (cajas)
-   * - 'GLOBAL' → eventos de catálogo (productos)
+   * - sucursalId real → eventos operativos
+   * - 'GLOBAL' → catálogos / maestros
    */
   sucursalId: string
 
-  // opcionales según evento
+  // IDs relacionados (según evento)
   cajaId?: string
   aperturaCajaId?: string
 
+  pedidoId?: string
+  despachoId?: string
+
   productoId?: string
 
-  // quién originó el evento (para ignorar eco)
+  /**
+   * Usuario que originó el evento
+   * - Permite al frontend ignorar eco
+   */
   origenUsuarioId?: string
+  origenUsuarioNombre?: string
 }

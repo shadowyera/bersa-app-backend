@@ -9,6 +9,7 @@ import {
 import {
   TIPO_MOVIMIENTO,
   SUBTIPO_MOVIMIENTO,
+  REFERENCIA_MOVIMIENTO,
 } from '../movimiento/movimiento.model'
 
 /**
@@ -89,8 +90,8 @@ export const registrarIngresoStock = async (
 
       referencia: {
         tipo: esCompraProveedor
-          ? 'COMPRA'
-          : 'AJUSTE',
+          ? REFERENCIA_MOVIMIENTO.COMPRA
+          : REFERENCIA_MOVIMIENTO.AJUSTE,
         id: abastecimiento._id,
       },
 
