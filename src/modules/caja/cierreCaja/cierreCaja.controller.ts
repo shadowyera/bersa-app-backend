@@ -8,50 +8,86 @@ export const cerrarCajaController = async (
   res: Response
 ) => {
   try {
+
+    /* ============================
+       Auth
+    ============================ */
+
     const user = req.user
+
     if (!user) {
-      return res.status(401).json({ message: 'No autenticado' })
+      return res
+        .status(401)
+        .json({ message: 'No autenticado' })
     }
+
+    /* ============================
+       Params
+    ============================ */
 
     const { cajaId } = req.params
-    const { montoFinal } = req.body
+    const { montoFinal, motivoDiferencia } = req.body
 
     if (!Types.ObjectId.isValid(cajaId)) {
-      return res.status(400).json({ message: 'CajaId inválido' })
+      return res
+        .status(400)
+        .json({ message: 'CajaId inválido' })
     }
+
+    /* ============================
+       Usecase
+    ============================ */
 
     const resumen = await cerrarCajaAutomaticoApp({
       cajaId: new Types.ObjectId(cajaId),
       montoFinal: Number(montoFinal),
+      motivoDiferencia,
       usuarioId: new Types.ObjectId(user._id),
       rol: user.rol,
       sucursalId: new Types.ObjectId(user.sucursalId),
       usuarioNombre: user.nombre,
     })
 
-    res.json(resumen)
+    return res.json(resumen)
+
   } catch (e: any) {
-    res.status(400).json({ message: e.message })
+
+    return res
+      .status(400)
+      .json({ message: e.message })
+
   }
 }
+
+/* =====================================
+   Resumen previo (sin cambios)
+===================================== */
 
 export const resumenPrevioCajaController = async (
   req: Request,
   res: Response
 ) => {
   try {
+
     const { cajaId } = req.params
 
     if (!Types.ObjectId.isValid(cajaId)) {
-      return res.status(400).json({ message: 'CajaId inválido' })
+      return res
+        .status(400)
+        .json({ message: 'CajaId inválido' })
     }
 
     const resumen = await calcularResumenCaja(
       new Types.ObjectId(cajaId)
     )
 
-    res.json(resumen)
+    return res.json(resumen)
+
   } catch (e: any) {
-    res.status(400).json({ message: e.message })
+
+    return res
+      .status(400)
+      .json({ message: e.message })
+
   }
 }

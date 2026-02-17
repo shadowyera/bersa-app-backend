@@ -6,7 +6,17 @@ import {
 import { PagoModel } from '../../pago/pago.model'
 import { VentaModel } from '../../venta/venta.model'
 
-export const calcularResumenCaja = async (cajaId: Types.ObjectId) => {
+type PagosPorTipo = {
+  EFECTIVO: number
+  DEBITO: number
+  CREDITO: number
+  TRANSFERENCIA: number
+}
+
+export const calcularResumenCaja = async (
+  cajaId: Types.ObjectId
+) => {
+
   const apertura = await AperturaCajaModel.findOne({
     cajaId,
     estado: ESTADO_APERTURA_CAJA.ABIERTA,
@@ -16,23 +26,48 @@ export const calcularResumenCaja = async (cajaId: Types.ObjectId) => {
     throw new Error('No hay caja abierta')
   }
 
-  const ventas = await VentaModel.find({
+  /* ================================
+     Ventas FINALIZADAS
+  ================================ */
+
+  const ventasFinalizadas = await VentaModel.find({
     aperturaCajaId: apertura._id,
     estado: 'FINALIZADA',
   })
 
+  /* ================================
+     Pagos de esas ventas
+  ================================ */
+
   const pagos = await PagoModel.find({
-    aperturaCajaId: apertura._id,
+    ventaId: {
+      $in: ventasFinalizadas.map(v => v._id),
+    },
   })
 
-  const totalVentas = ventas.reduce(
+  /* ================================
+     Totales
+  ================================ */
+
+  const totalVentas = ventasFinalizadas.reduce(
     (sum, v) => sum + v.total,
     0
   )
 
-  const efectivoVentas = pagos
-    .filter(p => p.tipo === 'EFECTIVO')
-    .reduce((sum, p) => sum + p.monto, 0)
+  const pagosPorTipo: PagosPorTipo = {
+    EFECTIVO: 0,
+    DEBITO: 0,
+    CREDITO: 0,
+    TRANSFERENCIA: 0,
+  }
+
+  for (const p of pagos) {
+    if (pagosPorTipo[p.tipo] !== undefined) {
+      pagosPorTipo[p.tipo] += p.monto
+    }
+  }
+
+  const efectivoVentas = pagosPorTipo.EFECTIVO
 
   const efectivoEsperado =
     apertura.montoInicial + efectivoVentas
@@ -41,8 +76,12 @@ export const calcularResumenCaja = async (cajaId: Types.ObjectId) => {
     cajaId,
     aperturaId: apertura._id,
     montoInicial: apertura.montoInicial,
+
     totalVentas,
+
     efectivoVentas,
     efectivoEsperado,
+
+    pagosPorTipo,
   }
 }

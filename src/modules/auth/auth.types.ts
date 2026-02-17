@@ -1,6 +1,9 @@
 export interface AuthenticatedUser {
-    _id: string
-    nombre: string
-    rol: string
-    sucursalId: string
+  _id: string
+  nombre: string
+  rol: string
+  sucursalId: string
+  sucursal?: {
+    esPrincipal: boolean
+  }
 }

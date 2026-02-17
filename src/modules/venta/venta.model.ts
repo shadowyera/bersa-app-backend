@@ -1,8 +1,12 @@
 import { Schema, model, Types } from 'mongoose'
 
+/* =====================================================
+   TIPOS DE DOMINIO
+===================================================== */
+
 /**
- * Item de una venta
- * Siempre en unidades base
+ * Item individual dentro de una venta.
+ * Snapshot del precio al momento de vender.
  */
 export interface VentaItem {
   productoId: Types.ObjectId
@@ -12,57 +16,167 @@ export interface VentaItem {
 }
 
 /**
- * Venta POS
+ * Datos del receptor cuando el documento es FACTURA.
+ * Se almacenan como snapshot histórico.
+ */
+export interface DocumentoReceptor {
+  rut: string
+  razonSocial: string
+  giro: string
+  direccion: string
+  comuna: string
+  ciudad: string
+}
+
+/**
+ * Información tributaria básica del documento.
+ * NO representa emisión electrónica.
+ */
+export interface DocumentoTributario {
+  tipo: 'BOLETA' | 'FACTURA'
+  receptor?: DocumentoReceptor
+  requiereEmisionSii: boolean
+}
+
+/**
+ * Entidad principal Venta (Nivel POS).
  */
 export interface Venta {
   _id: Types.ObjectId
 
   sucursalId: Types.ObjectId
   cajaId: Types.ObjectId
-  aperturaCajaId: Types.ObjectId // 🔥 turno de caja
-  usuarioId: Types.ObjectId      // quién vendió
+  aperturaCajaId: Types.ObjectId
+  usuarioId: Types.ObjectId
+
+  numeroVenta: number
 
   items: VentaItem[]
 
-  /** Total real de los productos (sin redondeo) */
   total: number
-
-  /** Ajuste por redondeo de efectivo (ej: +1, -2, 0) */
   ajusteRedondeo: number
-
-  /** Total realmente cobrado al cliente (total + ajuste) */
   totalCobrado: number
 
   estado: 'ABIERTA' | 'FINALIZADA' | 'ANULADA'
 
+  documentoTributario: DocumentoTributario
+
   createdAt: Date
 }
+
+/* =====================================================
+   SUBSCHEMAS
+===================================================== */
 
 const ventaItemSchema = new Schema<VentaItem>(
   {
     productoId: {
       type: Schema.Types.ObjectId,
       ref: 'Producto',
-      required: true
+      required: true,
     },
+
     cantidad: {
       type: Number,
       required: true,
-      min: 1
+      min: 1,
     },
+
     precioUnitario: {
       type: Number,
       required: true,
-      min: 0
+      min: 0,
     },
+
     subtotal: {
       type: Number,
       required: true,
-      min: 0
-    }
+      min: 0,
+    },
   },
-  { _id: false }
+  {
+    _id: false,
+  }
 )
+
+const documentoReceptorSchema = new Schema<DocumentoReceptor>(
+  {
+    rut: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    razonSocial: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    giro: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    direccion: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    comuna: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    ciudad: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+  },
+  {
+    _id: false,
+  }
+)
+
+const documentoTributarioSchema = new Schema<DocumentoTributario>(
+  {
+    tipo: {
+      type: String,
+      enum: ['BOLETA', 'FACTURA'],
+      required: true,
+      default: 'BOLETA',
+      index: true,
+    },
+
+    receptor: {
+      type: documentoReceptorSchema,
+      required: false,
+    },
+
+    /**
+     * Flag semántico:
+     * - true  => esta venta debe ser enviada al SII en el futuro
+     * - false => nunca se enviará (boleta simple POS)
+     */
+    requiereEmisionSii: {
+      type: Boolean,
+      required: true,
+      default: false,
+      index: true,
+    },
+  },
+  {
+    _id: false,
+  }
+)
+
+/* =====================================================
+   SCHEMA PRINCIPAL
+===================================================== */
 
 const ventaSchema = new Schema<Venta>(
   {
@@ -70,28 +184,34 @@ const ventaSchema = new Schema<Venta>(
       type: Schema.Types.ObjectId,
       ref: 'Sucursal',
       required: true,
-      index: true
+      index: true,
     },
 
     cajaId: {
       type: Schema.Types.ObjectId,
       ref: 'Caja',
       required: true,
-      index: true
+      index: true,
     },
 
     aperturaCajaId: {
       type: Schema.Types.ObjectId,
       ref: 'AperturaCaja',
       required: true,
-      index: true
+      index: true,
     },
 
     usuarioId: {
       type: Schema.Types.ObjectId,
       ref: 'Usuario',
       required: true,
-      index: true
+      index: true,
+    },
+
+    numeroVenta: {
+      type: Number,
+      required: true,
+      index: true,
     },
 
     items: {
@@ -99,41 +219,50 @@ const ventaSchema = new Schema<Venta>(
       required: true,
       validate: [
         (items: VentaItem[]) => items.length > 0,
-        'La venta debe tener al menos un item'
-      ]
+        'La venta debe tener al menos un item',
+      ],
     },
 
-    /** Total matemático de la venta */
     total: {
       type: Number,
       required: true,
-      min: 0
+      min: 0,
     },
 
-    /** Ajuste por redondeo */
     ajusteRedondeo: {
       type: Number,
       required: true,
-      default: 0
+      default: 0,
     },
 
-    /** Total efectivamente cobrado */
     totalCobrado: {
       type: Number,
       required: true,
-      min: 0
+      min: 0,
     },
 
     estado: {
       type: String,
       enum: ['ABIERTA', 'FINALIZADA', 'ANULADA'],
       default: 'FINALIZADA',
-      index: true
-    }
+      index: true,
+    },
+
+    documentoTributario: {
+      type: documentoTributarioSchema,
+      required: true,
+    },
   },
   {
-    timestamps: { createdAt: true, updatedAt: false }
+    timestamps: { createdAt: true, updatedAt: false },
   }
 )
 
-export const VentaModel = model<Venta>('Venta', ventaSchema)
+/* =====================================================
+   MODEL
+===================================================== */
+
+export const VentaModel = model<Venta>(
+  'Venta',
+  ventaSchema
+)

@@ -15,7 +15,6 @@ export const loginController = async (
   res: Response
 ) => {
   const { email, password } = req.body
-
   const usuario = await UsuarioModel.findOne({
     email,
     activo: true,

@@ -10,12 +10,19 @@ export const cerrarCajaAutomatico = async ({
   usuarioId,
   rol,
   montoFinal,
+  motivoDiferencia,
 }: {
   cajaId: Types.ObjectId
   usuarioId: Types.ObjectId
   rol: 'ADMIN' | 'ENCARGADO' | 'CAJERO' | 'BODEGUERO'
   montoFinal: number
+  motivoDiferencia?: string
 }) => {
+
+  /* ============================
+     Validaciones base
+  ============================ */
+
   if (montoFinal < 0) {
     throw new Error('Monto final inválido')
   }
@@ -24,10 +31,28 @@ export const cerrarCajaAutomatico = async ({
     throw new Error('No tienes permiso para cerrar caja')
   }
 
+  /* ============================
+     Calcular resumen
+  ============================ */
+
   const resumen = await calcularResumenCaja(cajaId)
 
   const diferencia =
     montoFinal - resumen.efectivoEsperado
+
+  /* ============================
+     Regla negocio NUEVA
+  ============================ */
+
+  if (diferencia !== 0 && !motivoDiferencia) {
+    throw new Error(
+      'Debe indicar motivo de diferencia'
+    )
+  }
+
+  /* ============================
+     Persistencia
+  ============================ */
 
   const apertura = await AperturaCajaModel.findById(
     resumen.aperturaId
@@ -41,14 +66,26 @@ export const cerrarCajaAutomatico = async ({
   apertura.fechaCierre = new Date()
   apertura.montoFinal = montoFinal
   apertura.diferencia = diferencia
-  apertura.usuarioCierreId = usuarioId   // 🔥
+  apertura.usuarioCierreId = usuarioId
+
+  // 🔥 NUEVO
+  apertura.motivoDiferencia =
+    diferencia !== 0
+      ? motivoDiferencia
+      : undefined
 
   await apertura.save()
+
+  /* ============================
+     Response
+  ============================ */
 
   return {
     ...resumen,
     montoFinal,
     diferencia,
+    motivoDiferencia:
+      apertura.motivoDiferencia ?? null,
     fechaCierre: apertura.fechaCierre,
     usuarioCierreId: usuarioId,
   }

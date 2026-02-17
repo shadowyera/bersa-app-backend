@@ -10,12 +10,21 @@ export enum TIPO_MOVIMIENTO {
 }
 
 export enum SUBTIPO_MOVIMIENTO {
-  /* Ingresos */
+  /* =====================
+     INGRESOS
+  ===================== */
+
   COMPRA_PROVEEDOR = 'COMPRA_PROVEEDOR',
   TRANSFERENCIA_RECEPCION = 'TRANSFERENCIA_RECEPCION',
   AJUSTE_POSITIVO = 'AJUSTE_POSITIVO',
 
-  /* Egresos */
+  /** 🔁 Ingreso por anulación de venta POS */
+  ANULACION_VENTA_POS = 'ANULACION_VENTA_POS',
+
+  /* =====================
+     EGRESOS
+  ===================== */
+
   VENTA_POS = 'VENTA_POS',
   TRANSFERENCIA_ENVIO = 'TRANSFERENCIA_ENVIO',
   AJUSTE_NEGATIVO = 'AJUSTE_NEGATIVO',
