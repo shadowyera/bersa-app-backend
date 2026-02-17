@@ -57,13 +57,13 @@ app.use(cookieParser())
 /* ===============================
    Rutas públicas
 =============================== */
-app.use('/auth', authRoutes)
+app.use('/api/auth', authRoutes)
 
 /* ===============================
    Auth global (JWT)
-   - lee token desde cookie httpOnly
 =============================== */
 app.use(authMiddleware)
+
 
 /* ===============================
    Headers comunes API
