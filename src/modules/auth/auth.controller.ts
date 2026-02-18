@@ -15,6 +15,7 @@ export const loginController = async (
   res: Response
 ) => {
   const { email, password } = req.body
+
   const usuario = await UsuarioModel.findOne({
     email,
     activo: true,
@@ -48,10 +49,11 @@ export const loginController = async (
     { expiresIn: '8h' }
   )
 
+  // ✅ COOKIE CROSS-SITE PRODUCCIÓN
   res.cookie('token', token, {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: false, // true en prod (https)
+    sameSite: 'none',
+    secure: true,
     path: '/',
   })
 
@@ -67,8 +69,6 @@ export const loginController = async (
 
 /**
  * GET /api/auth/me
- * - Fuente de verdad post-refresh
- * - Siempre devuelve el usuario completo
  */
 export const meController = async (
   req: Request,
@@ -111,16 +111,16 @@ export const meController = async (
 
 /**
  * POST /api/auth/logout
- * - Borra cookie de autenticación
  */
 export const logoutController = (
   _req: Request,
   res: Response
 ) => {
+  // ✅ BORRAR COOKIE CROSS-SITE
   res.clearCookie('token', {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: false, // true en prod
+    sameSite: 'none',
+    secure: true,
     path: '/',
   })
 
