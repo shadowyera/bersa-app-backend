@@ -44,7 +44,6 @@ export interface DocumentoTributario {
 export interface Venta {
   _id: Types.ObjectId
 
-  // 🔥 NUEVO
   folio: string
 
   sucursalId: Types.ObjectId

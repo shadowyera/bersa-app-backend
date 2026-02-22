@@ -1,7 +1,11 @@
+import { Types } from 'mongoose'
 import { AperturaCajaModel } from '../aperturaCaja/aperturaCaja.model'
 import { VentaModel } from '../../venta/venta.model'
 import { UsuarioModel } from '../../usuario/usuario.model'
-import { Types } from 'mongoose'
+
+/* =====================================================
+   INPUT
+===================================================== */
 
 interface ListarAperturasAdminInput {
   from?: Date
@@ -11,7 +15,7 @@ interface ListarAperturasAdminInput {
 }
 
 /* =====================================================
-   LISTAR APERTURAS (ADMIN) - OPTIMIZADO
+   LISTAR APERTURAS (ADMIN)  → PAGINADO
 ===================================================== */
 
 export const listarAperturasAdmin = async (
@@ -22,12 +26,8 @@ export const listarAperturasAdmin = async (
 
   if (filtros.from || filtros.to) {
     query.fechaApertura = {}
-
-    if (filtros.from)
-      query.fechaApertura.$gte = filtros.from
-
-    if (filtros.to)
-      query.fechaApertura.$lte = filtros.to
+    if (filtros.from) query.fechaApertura.$gte = filtros.from
+    if (filtros.to) query.fechaApertura.$lte = filtros.to
   }
 
   const page = filtros.page ?? 1
@@ -35,6 +35,7 @@ export const listarAperturasAdmin = async (
   const skip = (page - 1) * limit
 
   const [aperturas, total] = await Promise.all([
+
     AperturaCajaModel.find(query)
       .sort({ fechaApertura: -1 })
       .skip(skip)
@@ -42,6 +43,7 @@ export const listarAperturasAdmin = async (
       .lean(),
 
     AperturaCajaModel.countDocuments(query),
+
   ])
 
   if (aperturas.length === 0) {
@@ -52,11 +54,17 @@ export const listarAperturasAdmin = async (
     }
   }
 
+  /* ================= OBTENER VENTAS ================= */
+
   const aperturaIds = aperturas.map(a => a._id)
 
   const ventas = await VentaModel.find({
     aperturaCajaId: { $in: aperturaIds }
-  }).sort({ createdAt: 1 }).lean()
+  })
+    .sort({ createdAt: 1 })
+    .lean()
+
+  /* ================= OBTENER USUARIOS ================= */
 
   const usuariosIds = new Set<string>()
 
@@ -76,14 +84,12 @@ export const listarAperturasAdmin = async (
   const usuariosMap = new Map<string, string>()
 
   usuarios.forEach(u => {
-    usuariosMap.set(
-      String(u._id),
-      u.nombre
-    )
+    usuariosMap.set(String(u._id), u.nombre)
   })
 
-  const ventasPorApertura =
-    new Map<string, any[]>()
+  /* ================= AGRUPAR VENTAS POR APERTURA ================= */
+
+  const ventasPorApertura = new Map<string, any[]>()
 
   for (const v of ventas) {
     const key = String(v.aperturaCajaId)
@@ -93,18 +99,17 @@ export const listarAperturasAdmin = async (
     ventasPorApertura.get(key)!.push(v)
   }
 
+  /* ================= ARMAR DTO ================= */
+
   const data = aperturas.map(apertura => {
 
     const ventasApertura =
-      ventasPorApertura.get(
-        String(apertura._id)
-      ) || []
+      ventasPorApertura.get(String(apertura._id)) || []
 
-    const totalCobrado =
-      ventasApertura.reduce(
-        (sum, v) => sum + (v.totalCobrado || 0),
-        0
-      )
+    const totalCobrado = ventasApertura.reduce(
+      (sum, v) => sum + (v.totalCobrado || 0),
+      0
+    )
 
     const diferencia =
       apertura.montoFinal != null &&
@@ -118,20 +123,14 @@ export const listarAperturasAdmin = async (
       cajaId: apertura.cajaId,
       sucursalId: apertura.sucursalId,
 
-      usuarioAperturaId:
-        apertura.usuarioAperturaId,
-      usuarioCierreId:
-        apertura.usuarioCierreId,
+      usuarioAperturaId: apertura.usuarioAperturaId,
+      usuarioCierreId: apertura.usuarioCierreId,
 
       usuarioAperturaNombre:
-        usuariosMap.get(
-          String(apertura.usuarioAperturaId)
-        ) || null,
+        usuariosMap.get(String(apertura.usuarioAperturaId)) || null,
 
       usuarioCierreNombre:
-        usuariosMap.get(
-          String(apertura.usuarioCierreId)
-        ) || null,
+        usuariosMap.get(String(apertura.usuarioCierreId)) || null,
 
       fechaApertura: apertura.fechaApertura,
       fechaCierre: apertura.fechaCierre,
@@ -141,10 +140,18 @@ export const listarAperturasAdmin = async (
       totalCobrado,
 
       diferencia,
-      motivoDiferencia:
-        apertura.motivoDiferencia,
+      motivoDiferencia: apertura.motivoDiferencia,
 
-      ventas: ventasApertura,
+      ventas: ventasApertura.map(v => ({
+        _id: v._id,
+        folio: v.folio,
+        numeroVenta: v.numeroVenta,
+        total: v.total,
+        totalCobrado: v.totalCobrado,
+        estado: v.estado,
+        createdAt: v.createdAt,
+      })),
+
     }
   })
 
@@ -156,51 +163,46 @@ export const listarAperturasAdmin = async (
 }
 
 /* =====================================================
-   DETALLE APERTURA (ADMIN) - OPTIMIZADO
+   DETALLE APERTURA (ADMIN) → SIN PAGINACIÓN
 ===================================================== */
 
 export const obtenerAperturaAdminDetalle = async (
   aperturaId: string
 ) => {
 
-  const apertura =
-    await AperturaCajaModel
-      .findById(aperturaId)
-      .lean()
+  const apertura = await AperturaCajaModel
+    .findById(aperturaId)
+    .lean()
 
   if (!apertura) {
-    throw new Error(
-      'Apertura no encontrada'
-    )
+    throw new Error('Apertura no encontrada')
   }
 
-  const ventas = await VentaModel.find({
-    aperturaCajaId: apertura._id,
-  })
-    .sort({ createdAt: 1 })
-    .lean()
+  const [ventas, usuarios] = await Promise.all([
 
-  const usuariosIds = []
+    VentaModel.find({
+      aperturaCajaId: apertura._id,
+    })
+      .sort({ createdAt: 1 })
+      .lean(),
 
-  if (apertura.usuarioAperturaId)
-    usuariosIds.push(apertura.usuarioAperturaId)
+    UsuarioModel.find({
+      _id: {
+        $in: [
+          apertura.usuarioAperturaId,
+          apertura.usuarioCierreId,
+        ].filter(Boolean)
+      }
+    })
+      .select('_id nombre')
+      .lean(),
 
-  if (apertura.usuarioCierreId)
-    usuariosIds.push(apertura.usuarioCierreId)
-
-  const usuarios = await UsuarioModel.find({
-    _id: { $in: usuariosIds }
-  })
-    .select('_id nombre')
-    .lean()
+  ])
 
   const usuariosMap = new Map<string, string>()
 
   usuarios.forEach(u => {
-    usuariosMap.set(
-      String(u._id),
-      u.nombre
-    )
+    usuariosMap.set(String(u._id), u.nombre)
   })
 
   const totalCobrado = ventas.reduce(
@@ -217,23 +219,11 @@ export const obtenerAperturaAdminDetalle = async (
   return {
     aperturaId: apertura._id,
 
-    cajaId: apertura.cajaId,
-    sucursalId: apertura.sucursalId,
-
-    usuarioAperturaId:
-      apertura.usuarioAperturaId,
-    usuarioCierreId:
-      apertura.usuarioCierreId,
-
     usuarioAperturaNombre:
-      usuariosMap.get(
-        String(apertura.usuarioAperturaId)
-      ) || null,
+      usuariosMap.get(String(apertura.usuarioAperturaId)) || null,
 
     usuarioCierreNombre:
-      usuariosMap.get(
-        String(apertura.usuarioCierreId)
-      ) || null,
+      usuariosMap.get(String(apertura.usuarioCierreId)) || null,
 
     fechaApertura: apertura.fechaApertura,
     fechaCierre: apertura.fechaCierre,
@@ -243,9 +233,15 @@ export const obtenerAperturaAdminDetalle = async (
     totalCobrado,
 
     diferencia,
-    motivoDiferencia:
-      apertura.motivoDiferencia,
+    motivoDiferencia: apertura.motivoDiferencia,
 
-    ventas,
+    ventas: ventas.map(v => ({
+      id: v._id,
+      folio: v.folio,
+      totalCobrado: v.totalCobrado,
+      estado: v.estado,
+      createdAt: v.createdAt,
+    })),
+
   }
 }

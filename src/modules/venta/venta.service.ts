@@ -13,6 +13,7 @@ import {
 } from '../caja/aperturaCaja/aperturaCaja.model'
 import { PagoModel } from '../pago/pago.model'
 import { generarNumeroVenta } from './contador/generarNumeroVenta'
+import { generarFolioVenta } from './contador/generarFolioVenta'
 
 /* =====================================================
    UTILIDADES
@@ -80,62 +81,49 @@ export const crearVentaPOS = async (
     documentoTributario,
   } = input
 
-  /* ================= VALIDACIONES BÁSICAS ================= */
-
-  if (!items.length) {
+  if (!items.length)
     throw new Error('La venta debe tener al menos un producto')
-  }
 
-  if (!pagos.length) {
+  if (!pagos.length)
     throw new Error('La venta debe tener al menos un pago')
-  }
 
-  if (!documentoTributario?.tipo) {
+  if (!documentoTributario?.tipo)
     throw new Error('Debe especificar el tipo de documento')
-  }
 
   if (
     documentoTributario.tipo === 'FACTURA' &&
     !documentoTributario.receptor
-  ) {
+  )
     throw new Error('Factura requiere datos del receptor')
-  }
 
-  /* ================= VALIDAR CAJA ABIERTA ================= */
+  const apertura = await AperturaCajaModel.findOne({
+    _id: aperturaCajaId,
+    cajaId,
+    estado: ESTADO_APERTURA_CAJA.ABIERTA,
+  })
 
-  const apertura =
-    await AperturaCajaModel.findOne({
-      _id: aperturaCajaId,
-      cajaId,
-      estado: ESTADO_APERTURA_CAJA.ABIERTA,
-    })
-
-  if (!apertura) {
+  if (!apertura)
     throw new Error('La caja no está abierta')
-  }
 
   const sucursalId = apertura.sucursalId
 
-  /* ================= PROCESAR ITEMS ================= */
+  // 🔥 FOLIO
+  const folio = await generarFolioVenta(sucursalId)
 
   let total = 0
   const itemsProcesados: any[] = []
 
   for (const item of items) {
+    const stock = await StockSucursalModel.findOne({
+      productoId: item.productoId,
+      sucursalId,
+    })
 
-    const stock =
-      await StockSucursalModel.findOne({
-        productoId: item.productoId,
-        sucursalId,
-      })
-
-    if (!stock) {
+    if (!stock)
       throw new Error('Producto no existe en esta sucursal')
-    }
 
-    if (!stock.habilitado) {
+    if (!stock.habilitado)
       throw new Error('Producto no habilitado para venta')
-    }
 
     const subtotal =
       item.cantidad * item.precioUnitario
@@ -150,8 +138,6 @@ export const crearVentaPOS = async (
     })
   }
 
-  /* ================= REDONDEO CLP ================= */
-
   const soloEfectivo =
     pagos.length === 1 &&
     pagos[0].tipo?.toUpperCase() === 'EFECTIVO'
@@ -165,57 +151,31 @@ export const crearVentaPOS = async (
     : total
 
   const sumaPagos = pagos.reduce(
-    (sum, p) => sum + p.monto,
+    (s, p) => s + p.monto,
     0
   )
 
-  if (soloEfectivo && sumaPagos !== total) {
-    throw new Error(
-      `Pagos (${sumaPagos}) no coinciden con total (${total})`
-    )
-  }
+  if (soloEfectivo && sumaPagos !== total)
+    throw new Error('Pagos no coinciden con total')
 
-  if (!soloEfectivo && sumaPagos !== totalCobrado) {
-    throw new Error(
-      `Pagos (${sumaPagos}) no coinciden con total (${totalCobrado})`
-    )
-  }
-
-  /* ================= NUMERACIÓN ================= */
+  if (!soloEfectivo && sumaPagos !== totalCobrado)
+    throw new Error('Pagos no coinciden con total')
 
   const numeroVenta =
-    await generarNumeroVenta(
-      aperturaCajaId
-    )
-
-  /* ================= DOCUMENTO TRIBUTARIO SNAPSHOT ================= */
+    await generarNumeroVenta(aperturaCajaId)
 
   const documentoFinal = {
     tipo: documentoTributario.tipo,
     receptor:
       documentoTributario.tipo === 'FACTURA'
-        ? {
-          rut: documentoTributario.receptor!.rut,
-          razonSocial:
-            documentoTributario.receptor!.razonSocial,
-          giro: documentoTributario.receptor!.giro,
-          direccion:
-            documentoTributario.receptor!.direccion,
-          comuna:
-            documentoTributario.receptor!.comuna,
-          ciudad:
-            documentoTributario.receptor!.ciudad,
-        }
+        ? { ...documentoTributario.receptor }
         : undefined,
     requiereEmisionSii:
-      documentoTributario.tipo === 'FACTURA'
-        ? true
-        : false,
+      documentoTributario.tipo === 'FACTURA',
   }
 
-  /* ================= CREAR VENTA ================= */
-
   const venta = await VentaModel.create({
+    folio,
     sucursalId,
     cajaId,
     aperturaCajaId,
@@ -229,8 +189,6 @@ export const crearVentaPOS = async (
     documentoTributario: documentoFinal,
   })
 
-  /* ================= CREAR PAGOS ================= */
-
   for (const pago of pagos) {
     await PagoModel.create({
       ventaId: venta._id,
@@ -240,8 +198,6 @@ export const crearVentaPOS = async (
       monto: pago.monto,
     })
   }
-
-  /* ================= DESCONTAR STOCK ================= */
 
   for (const item of itemsProcesados) {
     await registrarMovimiento({
@@ -261,7 +217,7 @@ export const crearVentaPOS = async (
 }
 
 /* =====================================================
-   ANULAR VENTA
+   ANULAR VENTA POS
 ===================================================== */
 
 export const anularVentaPOS = async (
@@ -272,7 +228,7 @@ export const anularVentaPOS = async (
 
   if (!venta) throw new Error('Venta no existe')
   if (venta.estado === 'ANULADA')
-    throw new Error('La venta ya está anulada')
+    throw new Error('Venta ya anulada')
   if (venta.estado !== 'FINALIZADA')
     throw new Error('Solo se pueden anular ventas finalizadas')
 
@@ -303,7 +259,7 @@ export const anularVentaPOS = async (
 }
 
 /* =====================================================
-   DETALLE VENTA
+   DETALLE VENTA POS
 ===================================================== */
 
 export const obtenerVentaDetalle = async (
@@ -314,9 +270,8 @@ export const obtenerVentaDetalle = async (
     .populate('items.productoId', 'nombre')
     .lean()
 
-  if (!venta) {
+  if (!venta)
     throw new Error('Venta no encontrada')
-  }
 
   const pagos = await PagoModel.find({
     ventaId,
@@ -324,10 +279,9 @@ export const obtenerVentaDetalle = async (
 
   return {
     _id: venta._id,
+    folio: venta.folio,
     numeroVenta: venta.numeroVenta,
-
     documentoTributario: venta.documentoTributario,
-
     total: venta.total,
     ajusteRedondeo: venta.ajusteRedondeo,
     totalCobrado: venta.totalCobrado,
@@ -361,7 +315,9 @@ interface ListarVentasAdminInput {
   estado?: 'FINALIZADA' | 'ANULADA'
   tipoDocumento?: 'BOLETA' | 'FACTURA'
 
-  // paginación
+  // 🔥 NUEVO
+  folio?: string
+
   page?: number
   limit?: number
 }
@@ -394,9 +350,8 @@ export const listarVentasAdmin = async (
     query['documentoTributario.tipo'] =
       filtros.tipoDocumento
 
-  /* ========================
-     PAGINACIÓN
-  ======================== */
+  if (filtros.folio)
+    query.folio = filtros.folio
 
   const page = filtros.page ?? 1
   const limit = filtros.limit ?? 10
@@ -415,20 +370,16 @@ export const listarVentasAdmin = async (
   return {
     data: ventas.map(v => ({
       _id: v._id,
+      folio: v.folio,
       numeroVenta: v.numeroVenta,
-
-      // 🔥 IMPORTANTE
       aperturaCajaId: v.aperturaCajaId,
-
       total: v.total,
       totalCobrado: v.totalCobrado,
       estado: v.estado,
       documentoTributario: v.documentoTributario,
-
       usuarioId: v.usuarioId,
       cajaId: v.cajaId,
       sucursalId: v.sucursalId,
-
       createdAt: v.createdAt,
     })),
 
@@ -450,9 +401,8 @@ export const obtenerVentaDetalleAdmin = async (
     .populate('items.productoId', 'nombre')
     .lean()
 
-  if (!venta) {
+  if (!venta)
     throw new Error('Venta no encontrada')
-  }
 
   const pagos = await PagoModel.find({
     ventaId,
@@ -460,16 +410,13 @@ export const obtenerVentaDetalleAdmin = async (
 
   return {
     _id: venta._id,
+    folio: venta.folio,
     numeroVenta: venta.numeroVenta,
-
     estado: venta.estado,
-
     usuarioId: venta.usuarioId,
     cajaId: venta.cajaId,
     sucursalId: venta.sucursalId,
-
     documentoTributario: venta.documentoTributario,
-
     total: venta.total,
     ajusteRedondeo: venta.ajusteRedondeo,
     totalCobrado: venta.totalCobrado,
