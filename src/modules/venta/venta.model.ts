@@ -44,6 +44,9 @@ export interface DocumentoTributario {
 export interface Venta {
   _id: Types.ObjectId
 
+  // 🔥 NUEVO
+  folio: string
+
   sucursalId: Types.ObjectId
   cajaId: Types.ObjectId
   aperturaCajaId: Types.ObjectId
@@ -180,6 +183,14 @@ const documentoTributarioSchema = new Schema<DocumentoTributario>(
 
 const ventaSchema = new Schema<Venta>(
   {
+    // 🔥 NUEVO
+    folio: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
+
     sucursalId: {
       type: Schema.Types.ObjectId,
       ref: 'Sucursal',

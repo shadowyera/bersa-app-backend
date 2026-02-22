@@ -27,6 +27,7 @@ import abastecimientoRoutes from './modules/abastecimiento/abastecimiento.routes
 import pedidoInternoRoutes from './modules/pedido-interno/pedido-interno.routes'
 import despachoInternoRoutes from './modules/despacho-interno/despacho-interno.routes'
 import aperturasActivasRoutes from './modules/caja/queries/aperturasActivas.routes'
+import aperturasAdminRoutes from './modules/caja/queries/aperturasAdmin.routes'
 
 dotenv.config()
 
@@ -88,6 +89,7 @@ app.use(proveedorRoutes)
 app.use(abastecimientoRoutes)
 app.use(pedidoInternoRoutes)
 app.use(despachoInternoRoutes)
+app.use(aperturasAdminRoutes)
 
 /* ===============================
    Mongo + Server

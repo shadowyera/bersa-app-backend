@@ -1,28 +1,53 @@
-import { Schema, model, Document } from 'mongoose';
+import { Schema, model, Document } from 'mongoose'
 
-interface Sucursal extends Document {
-  nombre: string;
-  direccion: string;
-  telefono: string;
-  activo: boolean;
-  modoAjusteInventario: boolean;
+export interface Sucursal extends Document {
+  nombre: string
+  codigo: string
+  direccion: string
+  telefono: string
+  activo: boolean
+  modoAjusteInventario: boolean
 
   /**
    * Indica si esta sucursal es la bodega / sala principal
    * (origen logístico)
    */
-  esPrincipal: boolean;
+  esPrincipal: boolean
 }
 
 const sucursalSchema = new Schema<Sucursal>({
-  nombre: { type: String, required: true },
-  direccion: { type: String, required: true },
-  telefono: { type: String, required: true },
-  activo: { type: Boolean, default: true },
+  nombre: {
+    type: String,
+    required: true
+  },
+
+  codigo: {
+    type: String,
+    required: true,
+    uppercase: true,
+    trim: true,
+    unique: true,
+    index: true
+  },
+
+  direccion: {
+    type: String,
+    required: true
+  },
+
+  telefono: {
+    type: String,
+    required: true
+  },
+
+  activo: {
+    type: Boolean,
+    default: true
+  },
 
   modoAjusteInventario: {
     type: Boolean,
-    default: false,
+    default: false
   },
 
   /**
@@ -30,10 +55,13 @@ const sucursalSchema = new Schema<Sucursal>({
    */
   esPrincipal: {
     type: Boolean,
-    default: false,
-  },
-});
+    default: false
+  }
+})
 
-const SucursalModel = model<Sucursal>('Sucursal', sucursalSchema);
+const SucursalModel = model<Sucursal>(
+  'Sucursal',
+  sucursalSchema
+)
 
-export default SucursalModel;
+export default SucursalModel
