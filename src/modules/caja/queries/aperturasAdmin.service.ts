@@ -2,6 +2,7 @@ import { Types } from 'mongoose'
 import { AperturaCajaModel } from '../aperturaCaja/aperturaCaja.model'
 import { VentaModel } from '../../venta/venta.model'
 import { UsuarioModel } from '../../usuario/usuario.model'
+import { PagoModel } from '../../pago/pago.model'
 
 /* =====================================================
    INPUT
@@ -15,7 +16,27 @@ interface ListarAperturasAdminInput {
 }
 
 /* =====================================================
-   LISTAR APERTURAS (ADMIN)  → PAGINADO
+   HELPERS
+===================================================== */
+
+const calcularEfectivoEsperado = (ventas: any[]) => {
+  let total = 0
+
+  for (const v of ventas) {
+    if (!Array.isArray(v.pagos)) continue
+
+    for (const p of v.pagos) {
+      if (p.tipo === 'EFECTIVO') {
+        total += p.monto
+      }
+    }
+  }
+
+  return total
+}
+
+/* =====================================================
+   LISTAR APERTURAS (ADMIN) → PAGINADO
 ===================================================== */
 
 export const listarAperturasAdmin = async (
@@ -64,6 +85,24 @@ export const listarAperturasAdmin = async (
     .sort({ createdAt: 1 })
     .lean()
 
+  /* ================= OBTENER PAGOS ================= */
+
+  const ventaIds = ventas.map(v => v._id)
+
+  const pagos = await PagoModel.find({
+    ventaId: { $in: ventaIds }
+  }).lean()
+
+  const pagosPorVenta = new Map<string, any[]>()
+
+  for (const p of pagos) {
+    const key = String(p.ventaId)
+    if (!pagosPorVenta.has(key)) {
+      pagosPorVenta.set(key, [])
+    }
+    pagosPorVenta.get(key)!.push(p)
+  }
+
   /* ================= OBTENER USUARIOS ================= */
 
   const usuariosIds = new Set<string>()
@@ -106,15 +145,23 @@ export const listarAperturasAdmin = async (
     const ventasApertura =
       ventasPorApertura.get(String(apertura._id)) || []
 
+    const ventasConPagos = ventasApertura.map(v => ({
+      ...v,
+      pagos: pagosPorVenta.get(String(v._id)) || [],
+    }))
+
     const totalCobrado = ventasApertura.reduce(
       (sum, v) => sum + (v.totalCobrado || 0),
       0
     )
 
+    const efectivoEsperado =
+      calcularEfectivoEsperado(ventasConPagos)
+
     const diferencia =
       apertura.montoFinal != null &&
       apertura.montoInicial != null
-        ? apertura.montoFinal - apertura.montoInicial
+        ? (apertura.montoFinal - apertura.montoInicial) - efectivoEsperado
         : 0
 
     return {
@@ -142,7 +189,7 @@ export const listarAperturasAdmin = async (
       diferencia,
       motivoDiferencia: apertura.motivoDiferencia,
 
-      ventas: ventasApertura.map(v => ({
+      ventas: ventasConPagos.map(v => ({
         _id: v._id,
         folio: v.folio,
         numeroVenta: v.numeroVenta,
@@ -150,6 +197,10 @@ export const listarAperturasAdmin = async (
         totalCobrado: v.totalCobrado,
         estado: v.estado,
         createdAt: v.createdAt,
+        pagos: v.pagos.map((p: any) => ({
+          tipo: p.tipo,
+          monto: p.monto,
+        }))
       })),
 
     }
@@ -163,7 +214,7 @@ export const listarAperturasAdmin = async (
 }
 
 /* =====================================================
-   DETALLE APERTURA (ADMIN) → SIN PAGINACIÓN
+   DETALLE APERTURA (ADMIN)
 ===================================================== */
 
 export const obtenerAperturaAdminDetalle = async (
@@ -178,26 +229,43 @@ export const obtenerAperturaAdminDetalle = async (
     throw new Error('Apertura no encontrada')
   }
 
-  const [ventas, usuarios] = await Promise.all([
+  const ventas = await VentaModel.find({
+    aperturaCajaId: apertura._id,
+  })
+    .sort({ createdAt: 1 })
+    .lean()
 
-    VentaModel.find({
-      aperturaCajaId: apertura._id,
-    })
-      .sort({ createdAt: 1 })
-      .lean(),
+  const ventaIds = ventas.map(v => v._id)
 
-    UsuarioModel.find({
-      _id: {
-        $in: [
-          apertura.usuarioAperturaId,
-          apertura.usuarioCierreId,
-        ].filter(Boolean)
-      }
-    })
-      .select('_id nombre')
-      .lean(),
+  const pagos = await PagoModel.find({
+    ventaId: { $in: ventaIds }
+  }).lean()
 
-  ])
+  const pagosPorVenta = new Map<string, any[]>()
+
+  for (const p of pagos) {
+    const key = String(p.ventaId)
+    if (!pagosPorVenta.has(key)) {
+      pagosPorVenta.set(key, [])
+    }
+    pagosPorVenta.get(key)!.push(p)
+  }
+
+  const ventasConPagos = ventas.map(v => ({
+    ...v,
+    pagos: pagosPorVenta.get(String(v._id)) || [],
+  }))
+
+  const usuarios = await UsuarioModel.find({
+    _id: {
+      $in: [
+        apertura.usuarioAperturaId,
+        apertura.usuarioCierreId,
+      ].filter(Boolean)
+    }
+  })
+    .select('_id nombre')
+    .lean()
 
   const usuariosMap = new Map<string, string>()
 
@@ -210,10 +278,13 @@ export const obtenerAperturaAdminDetalle = async (
     0
   )
 
+  const efectivoEsperado =
+    calcularEfectivoEsperado(ventasConPagos)
+
   const diferencia =
     apertura.montoFinal != null &&
     apertura.montoInicial != null
-      ? apertura.montoFinal - apertura.montoInicial
+      ? (apertura.montoFinal - apertura.montoInicial) - efectivoEsperado
       : 0
 
   return {
@@ -235,12 +306,22 @@ export const obtenerAperturaAdminDetalle = async (
     diferencia,
     motivoDiferencia: apertura.motivoDiferencia,
 
-    ventas: ventas.map(v => ({
+    ventas: ventasConPagos.map(v => ({
       id: v._id,
       folio: v.folio,
+      numeroVenta: v.numeroVenta,
+      total: v.total,
       totalCobrado: v.totalCobrado,
       estado: v.estado,
+      documentoTributario: v.documentoTributario,
+      usuarioId: v.usuarioId,
+      cajaId: v.cajaId,
+      sucursalId: v.sucursalId,
       createdAt: v.createdAt,
+      pagos: v.pagos.map((p: any) => ({
+        tipo: p.tipo,
+        monto: p.monto,
+      }))
     })),
 
   }
