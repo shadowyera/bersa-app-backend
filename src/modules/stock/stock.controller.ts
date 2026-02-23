@@ -1,95 +1,85 @@
 // src/modules/stock/stock.controller.ts
-import { Request, Response } from 'express';
-import { StockSucursalModel } from './stock.model';
-import { Types } from 'mongoose';
 
-export const getStockBySucursal = async (req: Request, res: Response) => {
-  const { sucursalId } = req.params;
+import { Request, Response } from 'express'
+import { Types } from 'mongoose'
 
-   const stock = await StockSucursalModel.find({ sucursalId })
-    .populate({
-      path: 'productoId',
-      select: 'nombre codigo precio activo categoriaId proveedorId',
-      populate: [
-        {
-          path: 'categoriaId',
-          select: 'nombre',
-        },
-        {
-          path: 'proveedorId',
-          select: 'nombre',
-        },
-      ],
-    });
+import {
+  obtenerStockPorSucursal,
+  updateStockHabilitadoService,
+} from './stock.service'
 
-  res.json(stock);
-};
+/* ======================================================
+   GET /api/stock/sucursal/:sucursalId
+   → Endpoint liviano para POS
+===================================================== */
 
-export const getStockByProducto = async (req: Request, res: Response) => {
-  const { productoId } = req.params;
+export const getStockBySucursal = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const { sucursalId } = req.params
 
-  const stock = await StockSucursalModel.find({ productoId })
-    .populate('sucursalId');
+    if (!Types.ObjectId.isValid(sucursalId)) {
+      return res.status(400).json({
+        message: 'sucursalId inválido',
+      })
+    }
 
-  res.json(stock);
-};
+    const stock = await obtenerStockPorSucursal(sucursalId)
 
-/**
- * PUT /api/stock/:stockId/habilitado
- * Habilita o deshabilita un producto en una sucursal
- */
+    return res.json(stock)
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Error al obtener stock por sucursal',
+    })
+  }
+}
+
+/* ======================================================
+   PUT /api/stock/:stockId/habilitado
+===================================================== */
+
 export const updateStockHabilitado = async (
   req: Request,
   res: Response
 ) => {
   try {
-    const { stockId } = req.params;
-    const { habilitado } = req.body;
-
-    // ================================
-    // Validaciones
-    // ================================
+    const { stockId } = req.params
+    const { habilitado } = req.body
 
     if (!Types.ObjectId.isValid(stockId)) {
       return res.status(400).json({
         message: 'stockId inválido',
-      });
+      })
     }
 
     if (typeof habilitado !== 'boolean') {
       return res.status(400).json({
         message: 'El campo habilitado debe ser boolean',
-      });
+      })
     }
 
-    // ================================
-    // Buscar stock
-    // ================================
+    const updated = await updateStockHabilitadoService(
+      stockId,
+      habilitado
+    )
 
-    const stock = await StockSucursalModel.findById(stockId);
-
-    if (!stock) {
+    if (!updated) {
       return res.status(404).json({
         message: 'Stock no encontrado',
-      });
+      })
     }
-
-    // ================================
-    // Actualizar habilitado
-    // ================================
-
-    stock.habilitado = habilitado;
-    await stock.save();
 
     return res.json({
       message: `Producto ${
         habilitado ? 'habilitado' : 'deshabilitado'
       } en la sucursal`,
-      data: stock,
-    });
+      data: updated,
+    })
   } catch (error) {
     return res.status(500).json({
       message: 'Error al actualizar estado del producto',
-    });
+    })
   }
-};
+}
