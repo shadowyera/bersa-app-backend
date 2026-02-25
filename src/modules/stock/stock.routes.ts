@@ -3,6 +3,7 @@
 import { Router } from 'express'
 
 import {
+  getAdminStock,
   getStockBySucursal,
   updateStockHabilitado,
 } from './stock.controller'
@@ -31,6 +32,11 @@ router.get(
 router.put(
   '/api/stock/:stockId/habilitado',
   updateStockHabilitado
+)
+
+router.get(
+  '/api/admin/stock',
+  getAdminStock
 )
 
 export default router
