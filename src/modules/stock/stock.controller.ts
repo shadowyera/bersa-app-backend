@@ -4,6 +4,7 @@ import { Request, Response } from 'express'
 import { Types } from 'mongoose'
 
 import {
+  obtenerStockAdminService,
   obtenerStockPorSucursal,
   updateStockHabilitadoService,
 } from './stock.service'
@@ -72,14 +73,42 @@ export const updateStockHabilitado = async (
     }
 
     return res.json({
-      message: `Producto ${
-        habilitado ? 'habilitado' : 'deshabilitado'
-      } en la sucursal`,
+      message: `Producto ${habilitado ? 'habilitado' : 'deshabilitado'
+        } en la sucursal`,
       data: updated,
     })
   } catch (error) {
     return res.status(500).json({
       message: 'Error al actualizar estado del producto',
+    })
+  }
+}
+
+/* ======================================================
+   GET /api/admin/stock?sucursalId=xxx
+===================================================== */
+
+export const getAdminStock = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const { sucursalId } = req.query
+
+    if (!sucursalId || !Types.ObjectId.isValid(String(sucursalId))) {
+      return res.status(400).json({
+        message: 'sucursalId inválido',
+      })
+    }
+
+    const stock = await obtenerStockAdminService(
+      String(sucursalId)
+    )
+
+    return res.json(stock)
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Error al obtener stock admin',
     })
   }
 }

@@ -109,3 +109,21 @@ export const updateStockHabilitadoService = async (
     habilitado: stock.habilitado,
   }
 }
+
+export async function obtenerStockAdminService(
+  sucursalId: string
+) {
+  const stocks = await StockSucursalModel.find({
+    sucursalId,
+  })
+    .populate('productoId', 'nombre')
+    .lean()
+
+  return stocks.map((stock: any) => ({
+    stockId: stock._id.toString(),
+    productoId: stock.productoId._id.toString(),
+    nombreProducto: stock.productoId.nombre,
+    cantidad: stock.cantidad,
+    habilitado: stock.habilitado,
+  }))
+}
