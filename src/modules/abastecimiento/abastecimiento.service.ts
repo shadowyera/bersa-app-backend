@@ -1,3 +1,4 @@
+import mongoose, { Types } from 'mongoose'
 import {
   CrearIngresoStockInput,
   TIPO_ABASTECIMIENTO,
@@ -12,92 +13,111 @@ import {
   REFERENCIA_MOVIMIENTO,
 } from '../movimiento/movimiento.model'
 
-/**
- * INGRESO DE STOCK (2026)
- *
- * Reglas:
- * - NO existe proveedorId global
- * - El proveedor es snapshot por item
- * - 1 abastecimiento → N movimientos
- */
 export const registrarIngresoStock = async (
   input: CrearIngresoStockInput
 ) => {
-  const {
-    sucursalDestinoId,
-    items,
-    observacion,
-    createdBy,
-  } = input
+  const session = await mongoose.startSession()
 
-  if (!items || items.length === 0) {
-    throw new Error(
-      'Debe ingresar al menos un producto'
-    )
-  }
+  try {
+    session.startTransaction()
 
-  /* ================================
-     1. Normalizar items (snapshot)
-  ================================ */
+    const {
+      sucursalDestinoId,
+      items,
+      observacion,
+      createdBy,
+    } = input
 
-  const itemsSnapshot = items.map(item => {
-    if (item.cantidad <= 0) {
+    if (!items || items.length === 0) {
       throw new Error(
-        'La cantidad debe ser mayor a 0'
+        'Debe ingresar al menos un producto'
       )
     }
 
-    return {
-      productoId: item.productoId,
-      cantidad: item.cantidad,
+    /* ================================
+       1. Normalizar items (snapshot)
+    ================================ */
 
-      // 👇 SNAPSHOT DE PROVEEDOR (CLAVE)
-      proveedorId: item.proveedorId,
-      proveedorNombre: item.proveedorNombre,
+    const itemsSnapshot = items.map(item => {
+      if (item.cantidad <= 0) {
+        throw new Error(
+          'La cantidad debe ser mayor a 0'
+        )
+      }
+
+      return {
+        productoId: new Types.ObjectId(item.productoId),
+        cantidad: item.cantidad,
+        proveedorId: item.proveedorId
+          ? new Types.ObjectId(item.proveedorId)
+          : undefined,
+        proveedorNombre: item.proveedorNombre,
+      }
+    })
+
+    /* ================================
+       2. Crear abastecimiento
+    ================================ */
+
+    const abastecimiento = await AbastecimientoModel.create(
+      [
+        {
+          tipo: TIPO_ABASTECIMIENTO.INGRESO_STOCK,
+          sucursalDestinoId: new Types.ObjectId(sucursalDestinoId),
+          observacion,
+          createdBy: new Types.ObjectId(createdBy),
+          items: itemsSnapshot,
+        },
+      ],
+      { session }
+    )
+
+    const abastecimientoId = abastecimiento[0]._id
+
+    /* ================================
+       3. Registrar movimientos
+    ================================ */
+
+    for (const item of itemsSnapshot) {
+      const esCompraProveedor =
+        Boolean(item.proveedorId)
+
+      await registrarMovimiento(
+        {
+          tipoMovimiento: TIPO_MOVIMIENTO.INGRESO,
+          subtipoMovimiento: esCompraProveedor
+            ? SUBTIPO_MOVIMIENTO.COMPRA_PROVEEDOR
+            : SUBTIPO_MOVIMIENTO.AJUSTE_ADMIN,
+
+          productoId: item.productoId,
+          sucursalId: new Types.ObjectId(sucursalDestinoId),
+          cantidad: item.cantidad,
+
+          referencia: {
+            tipo: REFERENCIA_MOVIMIENTO.ABASTECIMIENTO,
+            id: abastecimientoId,
+          },
+
+          observacion,
+        },
+        session
+      )
     }
-  })
 
-  /* ================================
-     2. Crear abastecimiento
-  ================================ */
+    /* ================================
+       4. Commit
+    ================================ */
 
-  const abastecimiento =
-    await AbastecimientoModel.create({
-      tipo: TIPO_ABASTECIMIENTO.INGRESO_STOCK,
-      sucursalDestinoId,
-      observacion,
-      createdBy,
-      items: itemsSnapshot,
-    })
+    await session.commitTransaction()
+    session.endSession()
 
-  /* ================================
-     3. Registrar movimientos (kardex)
-  ================================ */
+    return abastecimiento[0]
 
-  for (const item of itemsSnapshot) {
-    const esCompraProveedor =
-      Boolean(item.proveedorId)
+  } catch (error) {
 
-    await registrarMovimiento({
-      tipoMovimiento: TIPO_MOVIMIENTO.INGRESO,
-      subtipoMovimiento: esCompraProveedor
-        ? SUBTIPO_MOVIMIENTO.COMPRA_PROVEEDOR
-        : SUBTIPO_MOVIMIENTO.AJUSTE_POSITIVO,
+    await session.abortTransaction()
+    session.endSession()
 
-      productoId: item.productoId,
-      sucursalId: sucursalDestinoId,
-      cantidad: item.cantidad,
-
-      referencia: {
-        tipo: esCompraProveedor
-          ? REFERENCIA_MOVIMIENTO.COMPRA
-          : REFERENCIA_MOVIMIENTO.AJUSTE,
-        id: abastecimiento._id,
-      },
-
-      observacion,
-    })
+    throw error
   }
-
-  return abastecimiento
 }

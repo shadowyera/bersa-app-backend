@@ -2,13 +2,15 @@ import { Request, Response } from 'express'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcrypt'
 import { UsuarioModel } from '../usuario/usuario.model'
+import SucursalModel from '../sucursal/sucursal.model'
+import { buildSession } from './buildSession'
 
 /**
  * POST /api/auth/login
  * - Valida credenciales
- * - Firma JWT con contexto necesario para backend
+ * - Firma JWT minimal
  * - Setea cookie httpOnly
- * - Devuelve usuario para UI
+ * - Devuelve sesión enriquecida (UserSession)
  */
 export const loginController = async (
   req: Request,
@@ -38,6 +40,19 @@ export const loginController = async (
       .json({ message: 'Credenciales inválidas' })
   }
 
+  const sucursal = await SucursalModel.findById(
+    usuario.sucursalId
+  )
+    .select('_id esPrincipal activo')
+    .lean()
+
+  if (!sucursal || !sucursal.activo) {
+    return res
+      .status(401)
+      .json({ message: 'Sucursal inválida' })
+  }
+
+  // 🔐 JWT minimal (solo para backend)
   const token = jwt.sign(
     {
       _id: usuario._id.toString(),
@@ -49,7 +64,6 @@ export const loginController = async (
     { expiresIn: '8h' }
   )
 
-  // ✅ COOKIE CROSS-SITE PRODUCCIÓN
   res.cookie('token', token, {
     httpOnly: true,
     sameSite: 'none',
@@ -57,56 +71,41 @@ export const loginController = async (
     path: '/',
   })
 
-  res.json({
-    user: {
-      _id: usuario._id.toString(),
-      nombre: usuario.nombre,
-      rol: usuario.rol,
-      sucursalId: usuario.sucursalId.toString(),
+  // 👇 Construimos usuario autenticado coherente
+  const authenticatedUser = {
+    _id: usuario._id.toString(),
+    nombre: usuario.nombre,
+    rol: usuario.rol,
+    sucursal: {
+      id: sucursal._id.toString(),
+      esPrincipal: sucursal.esPrincipal,
     },
-  })
+  }
+
+  const session = buildSession(authenticatedUser)
+
+  res.json({ user: session })
 }
 
 /**
  * GET /api/auth/me
+ * - Usa req.user del middleware
+ * - No consulta base de datos nuevamente
+ * - Devuelve sesión consistente
  */
-export const meController = async (
+export const meController = (
   req: Request,
   res: Response
 ) => {
-  try {
-    if (!req.user?._id) {
-      return res
-        .status(401)
-        .json({ message: 'No autenticado' })
-    }
-
-    const usuario = await UsuarioModel.findById(
-      req.user._id
-    )
-      .select('_id nombre rol sucursalId')
-      .lean()
-
-    if (!usuario) {
-      return res
-        .status(404)
-        .json({ message: 'Usuario no encontrado' })
-    }
-
-    res.json({
-      user: {
-        _id: usuario._id.toString(),
-        nombre: usuario.nombre,
-        rol: usuario.rol,
-        sucursalId: usuario.sucursalId.toString(),
-      },
-    })
-  } catch (error) {
-    console.error('[ME]', error)
-    res
-      .status(500)
-      .json({ message: 'Error interno' })
+  if (!req.user) {
+    return res
+      .status(401)
+      .json({ message: 'No autenticado' })
   }
+
+  const session = buildSession(req.user)
+
+  res.json({ user: session })
 }
 
 /**
@@ -116,7 +115,6 @@ export const logoutController = (
   _req: Request,
   res: Response
 ) => {
-  // ✅ BORRAR COOKIE CROSS-SITE
   res.clearCookie('token', {
     httpOnly: true,
     sameSite: 'none',

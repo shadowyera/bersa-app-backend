@@ -1,7 +1,7 @@
 import { Schema, model, Types } from 'mongoose'
 
 /* =====================================================
-   Tipos de Movimiento (Kardex)
+   DIRECCIÓN DEL MOVIMIENTO
 ===================================================== */
 
 export enum TIPO_MOVIMIENTO {
@@ -9,17 +9,20 @@ export enum TIPO_MOVIMIENTO {
   EGRESO = 'EGRESO',
 }
 
+/* =====================================================
+   SUBTIPO (MOTIVO DE NEGOCIO)
+===================================================== */
+
 export enum SUBTIPO_MOVIMIENTO {
+
   /* =====================
      INGRESOS
   ===================== */
 
   COMPRA_PROVEEDOR = 'COMPRA_PROVEEDOR',
   TRANSFERENCIA_RECEPCION = 'TRANSFERENCIA_RECEPCION',
-  AJUSTE_POSITIVO = 'AJUSTE_POSITIVO',
-
-  /** 🔁 Ingreso por anulación de venta POS */
   ANULACION_VENTA_POS = 'ANULACION_VENTA_POS',
+  AJUSTE_ADMIN = 'AJUSTE_ADMIN',
 
   /* =====================
      EGRESOS
@@ -27,41 +30,42 @@ export enum SUBTIPO_MOVIMIENTO {
 
   VENTA_POS = 'VENTA_POS',
   TRANSFERENCIA_ENVIO = 'TRANSFERENCIA_ENVIO',
-  AJUSTE_NEGATIVO = 'AJUSTE_NEGATIVO',
 }
 
 /* =====================================================
-   Referencias posibles del movimiento
+   REFERENCIA FUNCIONAL
 ===================================================== */
 
 export enum REFERENCIA_MOVIMIENTO {
   VENTA = 'VENTA',
-  COMPRA = 'COMPRA',
+  ABASTECIMIENTO = 'ABASTECIMIENTO',
   AJUSTE = 'AJUSTE',
   DESPACHO_INTERNO = 'DESPACHO_INTERNO',
   ANULACION = 'ANULACION',
 }
 
 /* =====================================================
-   Interface
+   INTERFACE
 ===================================================== */
 
 export interface Movimiento {
   _id: Types.ObjectId
 
-  /** Naturaleza del movimiento */
+  /** Dirección */
   tipoMovimiento: TIPO_MOVIMIENTO
+
+  /** Motivo del negocio */
   subtipoMovimiento: SUBTIPO_MOVIMIENTO
 
-  /** Producto afectado (unidad base) */
+  /** Producto afectado */
   productoId: Types.ObjectId
 
-  /** Sucursal donde ocurre el movimiento */
+  /** Sucursal */
   sucursalId: Types.ObjectId
 
   /**
-   * Cantidad movida (SIEMPRE positiva, unidad base)
-   * El signo lo define tipoMovimiento
+   * Cantidad SIEMPRE positiva.
+   * El signo lo define tipoMovimiento.
    */
   cantidad: number
 
@@ -71,9 +75,7 @@ export interface Movimiento {
   /** Stock después del movimiento */
   saldoPosterior: number
 
-  /**
-   * Referencia administrativa / funcional
-   */
+  /** Referencia funcional */
   referencia?: {
     tipo: REFERENCIA_MOVIMIENTO
     id: Types.ObjectId
@@ -82,9 +84,7 @@ export interface Movimiento {
   /** Observación libre */
   observacion?: string
 
-  /**
-   * Fecha efectiva del movimiento físico
-   */
+  /** Fecha efectiva */
   fecha: Date
 
   /** Auditoría técnica */
@@ -92,7 +92,7 @@ export interface Movimiento {
 }
 
 /* =====================================================
-   Schema
+   SCHEMA
 ===================================================== */
 
 const MovimientoSchema = new Schema<Movimiento>(
@@ -139,6 +139,7 @@ const MovimientoSchema = new Schema<Movimiento>(
     saldoPosterior: {
       type: Number,
       required: true,
+      index: true,
     },
 
     referencia: {
@@ -169,7 +170,17 @@ const MovimientoSchema = new Schema<Movimiento>(
 )
 
 /* =====================================================
-   Model
+   ÍNDICES IMPORTANTES
+===================================================== */
+
+// Consulta rápida por producto en kardex
+MovimientoSchema.index({ productoId: 1, fecha: -1 })
+
+// Consulta por sucursal + fecha (reportes)
+MovimientoSchema.index({ sucursalId: 1, fecha: -1 })
+
+/* =====================================================
+   MODEL
 ===================================================== */
 
 export const MovimientoModel = model<Movimiento>(

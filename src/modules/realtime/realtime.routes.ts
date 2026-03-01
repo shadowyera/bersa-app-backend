@@ -11,7 +11,8 @@ router.get(
   '/',
   authMiddleware,
   (req: Request, res: Response) => {
-    const sucursalId = req.user?.sucursalId
+
+    const sucursalId = req.user?.sucursal.id
 
     if (!sucursalId) {
       return res
@@ -19,12 +20,10 @@ router.get(
         .json({ message: 'Sucursal no encontrada' })
     }
 
-    // 🔥 FIX CLAVE:
-    // SIEMPRE registrar con STRING
     registerSSEClient(
       req,
       res,
-      sucursalId.toString()
+      sucursalId
     )
   }
 )

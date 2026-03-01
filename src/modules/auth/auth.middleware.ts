@@ -1,30 +1,27 @@
 import jwt from 'jsonwebtoken'
 import { Request, Response, NextFunction } from 'express'
 import SucursalModel from '../sucursal/sucursal.model'
+import { ROL_USUARIO } from '../usuario/usuario.model'
 
 export const authMiddleware = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
-
   const token = req.cookies?.token
 
   if (!token) {
-    return res
-      .status(401)
-      .json({ message: 'No autorizado' })
+    return res.status(401).json({ message: 'No autorizado' })
   }
 
   try {
-
     const decoded = jwt.verify(
       token,
       process.env.JWT_SECRET!
     ) as {
       _id: string
       nombre: string
-      rol: string
+      rol: ROL_USUARIO
       sucursalId: string
     }
 
@@ -44,14 +41,13 @@ export const authMiddleware = async (
       _id: decoded._id,
       nombre: decoded.nombre,
       rol: decoded.rol,
-      sucursalId: decoded.sucursalId,
       sucursal: {
+        id: sucursal._id.toString(),
         esPrincipal: sucursal.esPrincipal,
       },
     }
 
     next()
-
   } catch (error) {
     console.error('[AUTH]', error)
     return res

@@ -7,19 +7,53 @@ import { emitRealtimeEvent } from '../realtime/realtime.service'
 /* ======================================================
    GET productos (POS / Admin)
 ====================================================== */
-export const getProductos = async (req: Request, res: Response) => {
+export const getProductos = async (
+  req: Request,
+  res: Response
+) => {
   try {
-    const { includeInactive } = req.query
+    const {
+      includeInactive,
+      page = 1,
+      limit = 20,
+      search,
+    } = req.query
 
-    const filter =
-      includeInactive === 'true'
-        ? {}
-        : { activo: true }
+    const query: any = {}
 
-    const productos = await Producto.find(filter)
-      .populate('proveedorId', 'nombre')
+    // Activos por defecto
+    if (includeInactive !== 'true') {
+      query.activo = true
+    }
 
-    res.json(productos)
+    // Búsqueda opcional
+    if (search && typeof search === 'string') {
+      query.$or = [
+        { nombre: { $regex: search, $options: 'i' } },
+        { codigo: { $regex: search, $options: 'i' } },
+      ]
+    }
+
+    const pageNumber = Number(page)
+    const limitNumber = Number(limit)
+    const skip = (pageNumber - 1) * limitNumber
+
+    const [productos, total] = await Promise.all([
+      Producto.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNumber)
+        .lean(),
+
+      Producto.countDocuments(query),
+    ])
+
+    res.json({
+      data: productos,
+      page: pageNumber,
+      total,
+      totalPages: Math.ceil(total / limitNumber),
+    })
   } catch (error) {
     res.status(500).json({
       message: 'Error al obtener los productos',

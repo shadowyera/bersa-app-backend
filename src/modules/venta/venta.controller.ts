@@ -180,26 +180,40 @@ export const listarVentasAdminController = async (
       usuarioId,
       estado,
       tipoDocumento,
+      folio,
       page,
       limit,
     } = req.query
 
     const result = await listarVentasAdmin({
+
       from: from ? new Date(from as string) : undefined,
       to: to ? new Date(to as string) : undefined,
+
       sucursalId: sucursalId
         ? new Types.ObjectId(sucursalId as string)
         : undefined,
+
       cajaId: cajaId
         ? new Types.ObjectId(cajaId as string)
         : undefined,
+
       usuarioId: usuarioId
         ? new Types.ObjectId(usuarioId as string)
         : undefined,
-      estado: estado as any,
-      tipoDocumento: tipoDocumento as any,
 
-      // 👇 nuevos
+      estado: estado as
+        | 'FINALIZADA'
+        | 'ANULADA'
+        | undefined,
+
+      tipoDocumento: tipoDocumento as
+        | 'BOLETA'
+        | 'FACTURA'
+        | undefined,
+
+      folio: folio as string | undefined,
+
       page: page ? Number(page) : 1,
       limit: limit ? Number(limit) : 10,
     })

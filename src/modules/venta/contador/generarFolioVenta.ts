@@ -1,29 +1,33 @@
-import { Types } from 'mongoose'
+import { Types, ClientSession } from 'mongoose'
 import { FolioVentaContadorModel } from './folioVentaContador.model'
-import SucursalModel from '../../sucursal/sucursal.model';
-
+import SucursalModel from '../../sucursal/sucursal.model'
 
 function pad(num: number, size: number) {
   return num.toString().padStart(size, '0')
 }
 
-/**
- * Retorna folio único por sucursal
- * Ej: LON-20260222-000123
- */
 export async function generarFolioVenta(
-  sucursalId: Types.ObjectId
+  sucursalId: Types.ObjectId,
+  session?: ClientSession
 ): Promise<string> {
 
   const contador =
     await FolioVentaContadorModel.findOneAndUpdate(
       { sucursalId },
       { $inc: { ultimoNumero: 1 } },
-      { new: true, upsert: true }
+      {
+        new: true,
+        upsert: true,
+        session
+      }
     )
 
   const sucursal =
-    await SucursalModel.findById(sucursalId)
+    await SucursalModel.findById(
+      sucursalId,
+      null,
+      { session }
+    )
       .select('codigo')
       .lean()
 

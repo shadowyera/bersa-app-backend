@@ -1,8 +1,6 @@
-// src/modules/stock/stock.routes.ts
-
 import { Router } from 'express'
-
 import {
+  ajustarStockAdmin,
   getAdminStock,
   getStockBySucursal,
   updateStockHabilitado,
@@ -14,9 +12,6 @@ const router = Router()
    POS
 ===================================================== */
 
-/**
- * Obtiene stock vendible por sucursal
- */
 router.get(
   '/api/stock/sucursal/:sucursalId',
   getStockBySucursal
@@ -26,17 +21,19 @@ router.get(
    ADMIN
 ===================================================== */
 
-/**
- * Habilita / deshabilita producto en sucursal
- */
+router.get(
+  '/api/admin/stock',
+  getAdminStock
+)
+
 router.put(
   '/api/stock/:stockId/habilitado',
   updateStockHabilitado
 )
 
-router.get(
-  '/api/admin/stock',
-  getAdminStock
+router.post(
+  '/api/admin/stock/:stockId/ajuste',
+  ajustarStockAdmin
 )
 
 export default router

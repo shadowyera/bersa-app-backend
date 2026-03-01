@@ -34,12 +34,17 @@ export const createCaja = async (req: Request, res: Response) => {
 export const getCajas = async (req: Request, res: Response) => {
   try {
     const user = req.user
-    const sucursalId = user.sucursalId
 
-    // 1️⃣ Todas las cajas físicas de la sucursal
+    if (!user?.sucursal?.id) {
+      return res.status(400).json({
+        message: 'Sucursal no encontrada en sesión',
+      })
+    }
+
+    const sucursalId = user.sucursal.id
+
     const cajas = await CajaModel.find({ sucursalId })
 
-    // 2️⃣ Aperturas activas
     const aperturas = await AperturaCajaModel.find({
       sucursalId,
       estado: ESTADO_APERTURA_CAJA.ABIERTA,
@@ -49,26 +54,23 @@ export const getCajas = async (req: Request, res: Response) => {
       aperturas.map(a => [a.cajaId.toString(), a])
     )
 
-    // 3️⃣ Todas las cajas con info de estado
     const result = cajas.map(caja => {
       const apertura = mapaAperturas.get(caja._id.toString())
 
       return {
         id: caja._id.toString(),
         nombre: caja.nombre,
+        activa: caja.activa,
         abierta: !!apertura,
-
-        // 👇 ESTO es lo que faltaba
         usuarioAperturaNombre: apertura
           ? (apertura.usuarioAperturaId as any)?.nombre
           : undefined,
-
         fechaApertura: apertura
           ? apertura.fechaApertura
           : undefined,
       }
     })
-
+console.log('Cajas obtenidas:', result)
     return res.json(result)
   } catch (error) {
     console.error(error)

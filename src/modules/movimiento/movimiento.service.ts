@@ -1,4 +1,8 @@
-import { Types } from 'mongoose'
+import mongoose, {
+  Types,
+  ClientSession,
+} from 'mongoose'
+
 import { StockSucursalModel } from '../stock/stock.model'
 import {
   MovimientoModel,
@@ -7,6 +11,10 @@ import {
   REFERENCIA_MOVIMIENTO,
 } from './movimiento.model'
 
+/* =====================================================
+   INPUT
+===================================================== */
+
 interface RegistrarMovimientoInput {
   tipoMovimiento: TIPO_MOVIMIENTO
   subtipoMovimiento: SUBTIPO_MOVIMIENTO
@@ -14,7 +22,7 @@ interface RegistrarMovimientoInput {
   productoId: Types.ObjectId
   sucursalId: Types.ObjectId
 
-  /** Cantidad SIEMPRE positiva (unidad base) */
+  /** Cantidad SIEMPRE positiva */
   cantidad: number
 
   referencia?: {
@@ -25,118 +33,151 @@ interface RegistrarMovimientoInput {
   observacion?: string
 }
 
+/* =====================================================
+   REGISTRAR MOVIMIENTO (PRO + TRANSACCIONAL)
+===================================================== */
+
 export const registrarMovimiento = async (
-  input: RegistrarMovimientoInput
+  input: RegistrarMovimientoInput,
+  session?: ClientSession
 ) => {
-  const {
-    tipoMovimiento,
-    subtipoMovimiento,
-    productoId,
-    sucursalId,
-    cantidad,
-    referencia,
-    observacion,
-  } = input
 
-  /* ================================
-     1. Validaciones básicas
-  ================================ */
+  const externalSession = session
+  const localSession =
+    externalSession ?? await mongoose.startSession()
 
-  if (cantidad <= 0) {
-    throw new Error('La cantidad debe ser mayor a 0')
-  }
+  try {
 
-  /* ================================
-     2. Obtener stock actual
-  ================================ */
+    if (!externalSession) {
+      localSession.startTransaction()
+    }
 
-  const stock = await StockSucursalModel.findOne({
-    productoId,
-    sucursalId,
-  })
+    const {
+      tipoMovimiento,
+      subtipoMovimiento,
+      productoId,
+      sucursalId,
+      cantidad,
+      referencia,
+      observacion,
+    } = input
 
-  if (!stock) {
-    throw new Error(
-      'No existe stock para este producto en la sucursal'
+    /* ============================
+       VALIDACIONES
+    ============================ */
+
+    if (cantidad <= 0) {
+      throw new Error('La cantidad debe ser mayor a 0')
+    }
+
+    /* ============================
+       OBTENER STOCK
+    ============================ */
+
+    const stock = await StockSucursalModel.findOne(
+      { productoId, sucursalId },
+      null,
+      { session: localSession }
     )
-  }
 
-  /**
-   * Regla 2026:
-   * - Solo VENTA bloquea por habilitado
-   * - Despachos internos, ajustes y compras NO
-   */
-  if (
-    tipoMovimiento === TIPO_MOVIMIENTO.EGRESO &&
-    subtipoMovimiento === SUBTIPO_MOVIMIENTO.VENTA_POS &&
-    !stock.habilitado
-  ) {
-    throw new Error(
-      'Producto no habilitado para venta en esta sucursal'
+    if (!stock) {
+      throw new Error(
+        'No existe stock para este producto en la sucursal'
+      )
+    }
+
+    /**
+     * Regla:
+     * Solo VENTA bloquea por habilitado
+     */
+    if (
+      tipoMovimiento === TIPO_MOVIMIENTO.EGRESO &&
+      subtipoMovimiento === SUBTIPO_MOVIMIENTO.VENTA_POS &&
+      !stock.habilitado
+    ) {
+      throw new Error(
+        'Producto no habilitado para venta en esta sucursal'
+      )
+    }
+
+    const saldoAnterior = stock.cantidad
+
+    const delta =
+      tipoMovimiento === TIPO_MOVIMIENTO.INGRESO
+        ? cantidad
+        : -cantidad
+
+    const saldoPosterior = saldoAnterior + delta
+
+    if (saldoPosterior < 0) {
+      console.warn(
+        `[KARDEX] Stock negativo permitido | ` +
+          `Producto=${productoId.toString()} | ` +
+          `Sucursal=${sucursalId.toString()} | ` +
+          `Anterior=${saldoAnterior} | ` +
+          `Movimiento=${cantidad}`
+      )
+    }
+
+    /* ============================
+       UPDATE ATÓMICO
+    ============================ */
+
+    await StockSucursalModel.updateOne(
+      { _id: stock._id },
+      { $inc: { cantidad: delta } },
+      { session: localSession }
     )
-  }
 
-  const saldoAnterior = stock.cantidad
+    /* ============================
+       CREAR MOVIMIENTO
+    ============================ */
 
-  /* ================================
-     3. Calcular saldo posterior
-  ================================ */
-
-  const saldoPosterior =
-    tipoMovimiento === TIPO_MOVIMIENTO.INGRESO
-      ? saldoAnterior + cantidad
-      : saldoAnterior - cantidad
-
-  /* ================================
-     4. Stock negativo permitido
-  ================================ */
-
-  if (saldoPosterior < 0) {
-    console.warn(
-      `[KARDEX] Stock negativo permitido | ` +
-        `Producto=${productoId.toString()} | ` +
-        `Sucursal=${sucursalId.toString()} | ` +
-        `Anterior=${saldoAnterior} | ` +
-        `Movimiento=${cantidad}`
+    await MovimientoModel.create(
+      [
+        {
+          tipoMovimiento,
+          subtipoMovimiento,
+          productoId,
+          sucursalId,
+          cantidad,
+          saldoAnterior,
+          saldoPosterior,
+          referencia,
+          observacion,
+          fecha: new Date(),
+        },
+      ],
+      { session: localSession }
     )
-  }
 
-  /* ================================
-     5. Crear movimiento (Kardex)
-  ================================ */
+    /* ============================
+       COMMIT SOLO SI ES LOCAL
+    ============================ */
 
-  await MovimientoModel.create({
-    tipoMovimiento,
-    subtipoMovimiento,
-    productoId,
-    sucursalId,
-    cantidad,
-    saldoAnterior,
-    saldoPosterior,
-    referencia,
-    observacion,
-    fecha: new Date(),
-  })
+    if (!externalSession) {
+      await localSession.commitTransaction()
+      localSession.endSession()
+    }
 
-  /* ================================
-     6. Actualizar stock derivado
-  ================================ */
+    return {
+      productoId,
+      sucursalId,
+      saldoAnterior,
+      saldoPosterior,
+      cantidad,
+      tipoMovimiento,
+      subtipoMovimiento,
+      referencia,
+    }
 
-  stock.cantidad = saldoPosterior
-  await stock.save()
+  } catch (error) {
 
-  /* ================================
-     7. Retorno útil
-  ================================ */
+    if (!externalSession) {
+      await localSession.abortTransaction()
+      localSession.endSession()
+    }
 
-  return {
-    productoId,
-    sucursalId,
-    saldoAnterior,
-    saldoPosterior,
-    cantidad,
-    tipoMovimiento,
-    subtipoMovimiento,
-    referencia,
+    throw error
   }
 }
