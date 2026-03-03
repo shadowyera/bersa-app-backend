@@ -147,16 +147,27 @@ export const updateStockHabilitadoService = async (
   }
 }
 
-/* ======================================================
-   ADMIN STOCK
-===================================================== */
+//  ADMIN STOCK
+export interface ListarStockAdminInput {
+  sucursalId: string
+}
+
+export interface ListarStockAdminOutput {
+  data: AdminStockDTO[]
+  total: number
+}
 
 export const obtenerStockAdminService = async (
-  sucursalId: string
-): Promise<AdminStockDTO[]> => {
-  const stocks = await StockSucursalModel.find({
+  input: ListarStockAdminInput
+): Promise<ListarStockAdminOutput> => {
+
+  const { sucursalId } = input
+
+  const query = {
     sucursalId: new Types.ObjectId(sucursalId),
-  })
+  }
+
+  const stocks = await StockSucursalModel.find(query)
     .populate({
       path: 'productoId',
       select: 'nombre proveedorId',
@@ -166,7 +177,8 @@ export const obtenerStockAdminService = async (
       },
     })
     .lean<StockPopulateLean[]>()
-  return stocks
+
+  const data: AdminStockDTO[] = stocks
     .filter((stock) => {
       if (!stock?._id) return false
       if (!stock.productoId?._id) return false
@@ -176,15 +188,23 @@ export const obtenerStockAdminService = async (
     .map((stock) => ({
       stockId: stock._id!.toString(),
       productoId: stock.productoId!._id!.toString(),
-      nombreProducto: stock.productoId!.nombre ?? 'Producto sin nombre',
+      nombreProducto:
+        stock.productoId!.nombre ?? 'Producto sin nombre',
 
-      proveedorId: stock.productoId!.proveedorId?._id?.toString(),
-      proveedorNombre: stock.productoId!.proveedorId?.nombre,
+      proveedorId:
+        stock.productoId!.proveedorId?._id?.toString(),
+
+      proveedorNombre:
+        stock.productoId!.proveedorId?.nombre,
 
       cantidad: stock.cantidad!,
       habilitado: Boolean(stock.habilitado),
     }))
 
+  return {
+    data,
+    total: data.length,
+  }
 }
 
 export const ajustarStockAdminService = async (

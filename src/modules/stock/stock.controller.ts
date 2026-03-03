@@ -25,11 +25,11 @@ export const getStockBySucursal = async (
       })
     }
 
-    const stock = await obtenerStockPorSucursal(
-      sucursalId
-    )
+    const stock =
+      await obtenerStockPorSucursal(sucursalId)
 
     return res.json(stock)
+
   } catch (error) {
     console.error('[POS STOCK ERROR]', error)
 
@@ -59,8 +59,7 @@ export const updateStockHabilitado = async (
 
     if (typeof habilitado !== 'boolean') {
       return res.status(400).json({
-        message:
-          'El campo habilitado debe ser boolean',
+        message: 'El campo habilitado debe ser boolean',
       })
     }
 
@@ -82,14 +81,13 @@ export const updateStockHabilitado = async (
     console.error('[UPDATE STOCK ERROR]', error)
 
     return res.status(500).json({
-      message:
-        'Error al actualizar estado del producto',
+      message: 'Error al actualizar estado del producto',
     })
   }
 }
 
 /* ======================================================
-   ADMIN
+   ADMIN - SIN PAGINACIÓN BACKEND
 ===================================================== */
 
 export const getAdminStock = async (
@@ -101,19 +99,20 @@ export const getAdminStock = async (
 
     if (
       !sucursalId ||
-      !Types.ObjectId.isValid(String(sucursalId))
+      typeof sucursalId !== 'string' ||
+      !Types.ObjectId.isValid(sucursalId)
     ) {
       return res.status(400).json({
         message: 'sucursalId inválido',
       })
     }
 
-    const stock =
-      await obtenerStockAdminService(
-        String(sucursalId)
-      )
+    const result =
+      await obtenerStockAdminService({
+        sucursalId,
+      })
 
-    return res.json(stock)
+    return res.json(result)
 
   } catch (error) {
     console.error('[ADMIN STOCK ERROR]', error)
@@ -124,6 +123,10 @@ export const getAdminStock = async (
   }
 }
 
+/* ======================================================
+   AJUSTE ADMIN
+===================================================== */
+
 export const ajustarStockAdmin = async (
   req: Request,
   res: Response
@@ -132,7 +135,14 @@ export const ajustarStockAdmin = async (
     const { stockId } = req.params
     const { cantidad, motivo } = req.body
 
-    const usuarioId = req.user?._id // según tu auth
+    if (!Types.ObjectId.isValid(stockId)) {
+      return res.status(400).json({
+        message: 'stockId inválido',
+      })
+    }
+
+    const usuarioId = req.user?._id
+
     if (!usuarioId) {
       return res.status(401).json({
         message: 'No autorizado',

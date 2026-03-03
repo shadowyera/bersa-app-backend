@@ -26,14 +26,18 @@ router.get(
   getAdminStock
 )
 
-router.put(
-  '/api/stock/:stockId/habilitado',
-  updateStockHabilitado
-)
-
 router.post(
   '/api/admin/stock/:stockId/ajuste',
   ajustarStockAdmin
+)
+
+/* ======================================================
+   STOCK GENERAL
+===================================================== */
+
+router.put(
+  '/api/stock/:stockId/habilitado',
+  updateStockHabilitado
 )
 
 export default router
