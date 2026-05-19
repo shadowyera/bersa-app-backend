@@ -1,27 +1,27 @@
 import { Request, Response } from 'express'
-import { Types } from 'mongoose'
 import { AbastecimientoModel } from './abastecimiento.model'
 import { registrarIngresoStock } from './abastecimiento.service'
 
 /* ======================================================
    POST /api/abastecimientos/ingreso
-   Registra un ingreso de stock (evento + movimientos)
-   MODELO 2026
 ====================================================== */
+
 export const createIngresoStock = async (
   req: Request,
   res: Response
 ) => {
+
   try {
+
     const {
       sucursalDestinoId,
       items,
       observacion,
     } = req.body
 
-    if (!sucursalDestinoId || !items) {
+    if (!sucursalDestinoId) {
       return res.status(400).json({
-        message: 'Faltan datos obligatorios',
+        message: 'sucursalDestinoId es requerido',
       })
     }
 
@@ -33,54 +33,41 @@ export const createIngresoStock = async (
 
     const abastecimiento =
       await registrarIngresoStock({
-        sucursalDestinoId: new Types.ObjectId(
-          sucursalDestinoId
-        ),
+        sucursalDestinoId,
         observacion,
-        createdBy: new Types.ObjectId(req.user._id),
-
-        // 👇 SNAPSHOT COMPLETO (NO SE DESCARTA NADA)
-        items: items.map((item: any) => ({
-          productoId: new Types.ObjectId(
-            item.productoId
-          ),
-          cantidad: item.cantidad,
-
-          proveedorId: item.proveedorId
-            ? new Types.ObjectId(item.proveedorId)
-            : undefined,
-          proveedorNombre: item.proveedorNombre,
-        })),
+        createdBy: req.user._id,
+        items,
       })
 
     return res.status(201).json({
-      message:
-        'Ingreso de stock registrado correctamente',
+      message: 'Ingreso de stock registrado correctamente',
       data: abastecimiento,
     })
+
   } catch (error: any) {
+
     return res.status(400).json({
       message:
         error.message ||
         'Error al registrar ingreso de stock',
     })
+
   }
 }
 
-/* ======================================================
-   GET /api/abastecimientos
-   Listado de eventos de abastecimiento
-   MODELO 2026
-====================================================== */
+
 export const getAbastecimientos = async (
   req: Request,
   res: Response
 ) => {
+
   try {
-    const sucursalId =
-      req.query.sucursalId as string
+
+    const sucursalId = req.query.sucursalId as string
+
     const page = Number(req.query.page ?? 1)
     const limit = Number(req.query.limit ?? 10)
+
     const skip = (page - 1) * limit
 
     if (!sucursalId) {
@@ -90,28 +77,30 @@ export const getAbastecimientos = async (
     }
 
     const filter = {
-      sucursalDestinoId: new Types.ObjectId(
-        sucursalId
-      ),
+      sucursalDestinoId: sucursalId,
     }
 
     const [data, total] = await Promise.all([
+
       AbastecimientoModel.find(filter)
         .sort({ fecha: -1 })
         .skip(skip)
         .limit(limit)
 
-        // 👇 SOLO populate necesario
-        .populate(
-          'items.productoId',
-          'nombre unidadBase'
-        )
-        .populate('createdBy', 'nombre')
+        .populate({
+          path: 'items.productoId',
+          select: 'nombre unidadBase',
+        })
 
-        // NO populate proveedor (es snapshot)
+        .populate({
+          path: 'createdBy',
+          select: 'nombre',
+        })
+
         .lean(),
 
       AbastecimientoModel.countDocuments(filter),
+
     ])
 
     return res.json({
@@ -120,10 +109,60 @@ export const getAbastecimientos = async (
       page,
       limit,
     })
-  } catch (error) {
+
+
+
+  } catch {
+
+    return res.status(500).json({
+      message: 'Error al obtener abastecimientos',
+    })
+
+  }
+
+}
+
+export const getAbastecimientoById = async (
+  req: Request,
+  res: Response
+) => {
+
+  try {
+
+    const { id } = req.params
+
+    const abastecimiento =
+      await AbastecimientoModel.findById(id)
+
+        .populate({
+          path: 'items.productoId',
+          select: 'nombre unidadBase',
+        })
+
+        .populate({
+          path: 'createdBy',
+          select: 'nombre',
+        })
+
+        .lean()
+
+    if (!abastecimiento) {
+      return res.status(404).json({
+        message: 'Abastecimiento no encontrado',
+      })
+    }
+
+    return res.json({
+      data: abastecimiento,
+    })
+
+  } catch {
+
     return res.status(500).json({
       message:
-        'Error al obtener abastecimientos',
+        'Error al obtener abastecimiento',
     })
+
   }
+
 }

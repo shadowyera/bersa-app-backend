@@ -96,7 +96,7 @@ export async function crearDespachoInternoController(
         origen: ORIGEN_DESPACHO_INTERNO.PEDIDO,
         pedidoIds,
         itemsSuplentes,
-        sucursalOrigenId: req.user!.sucursalId,
+        sucursalOrigenId: req.user!.sucursal.id,
         usuarioId: req.user!._id,
       })
 
@@ -141,7 +141,7 @@ export async function crearDespachoInternoController(
 
       const despacho = await crearDespachoInterno({
         origen: ORIGEN_DESPACHO_INTERNO.DIRECTO,
-        sucursalOrigenId: req.user!.sucursalId,
+        sucursalOrigenId: req.user!.sucursal.id,
         sucursalDestinoId,
         usuarioId: req.user!._id,
         items,
@@ -174,7 +174,7 @@ export async function listarDespachosInternosController(
 ) {
   try {
     const filter: any = {
-      sucursalOrigenId: req.user!.sucursalId,
+      sucursalOrigenId: req.user!.sucursal.id,
     }
 
     const page = Number(req.query.page ?? 1)
@@ -232,7 +232,7 @@ export async function getDespachoInternoByIdController(
 
     if (
       despacho.sucursalOrigenId.toString() !==
-      req.user!.sucursalId
+      req.user!.sucursal.id
     ) {
       return res.status(403).json({
         message: 'No autorizado',

@@ -1,8 +1,10 @@
 import { Schema, model, Document } from 'mongoose';
 
 export interface Proveedor extends Document {
-  nombre: string;
-  activo: boolean;
+  nombre: string
+  activo: boolean
+  createdAt: Date
+  updatedAt: Date
 }
 
 const proveedorSchema = new Schema<Proveedor>(

@@ -1,117 +1,192 @@
-import { Request, Response } from 'express';
-import { ProveedorModel } from './proveedor.model';
+import { Request, Response } from 'express'
+import { Types } from 'mongoose'
 
-/**
- * GET /api/proveedores
- * Opcional: ?activo=true|false
- */
-export const getProveedores = async (req: Request, res: Response) => {
-  try {
-    const filtro: any = {};
+import {
+  listarProveedores,
+  crearProveedor,
+  actualizarProveedor,
+  toggleProveedorActivo,
+} from './proveedor.service'
 
-    if (req.query.activo !== undefined) {
-      filtro.activo = req.query.activo === 'true';
-    }
+/* =====================================================
+   LISTAR PROVEEDORES (ADMIN)
+===================================================== */
 
-    const proveedores = await ProveedorModel.find(filtro)
-      .sort({ nombre: 1 });
-
-    res.json(proveedores);
-  } catch (error) {
-    res.status(500).json({ message: 'Error al obtener proveedores' });
-  }
-};
-
-/**
- * POST /api/proveedores
- */
-export const createProveedor = async (req: Request, res: Response) => {
-  try {
-    const { nombre } = req.body;
-
-    if (!nombre?.trim()) {
-      return res.status(400).json({ message: 'Nombre requerido' });
-    }
-
-    const nombreLimpio = nombre.trim();
-
-    const existe = await ProveedorModel.findOne({
-      nombre: nombreLimpio,
-    });
-
-    if (existe) {
-      return res
-        .status(409)
-        .json({ message: 'Proveedor ya existe' });
-    }
-
-    const proveedor = await ProveedorModel.create({
-      nombre: nombreLimpio,
-      activo: true,
-    });
-
-    res.status(201).json(proveedor);
-  } catch (error) {
-    res.status(500).json({ message: 'Error al crear proveedor' });
-  }
-};
-
-/**
- * PUT /api/proveedores/:id
- */
-export const updateProveedor = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { nombre } = req.body;
-
-    if (!nombre?.trim()) {
-      return res.status(400).json({ message: 'Nombre requerido' });
-    }
-
-    const proveedor = await ProveedorModel.findById(id);
-
-    if (!proveedor) {
-      return res.status(404).json({ message: 'Proveedor no encontrado' });
-    }
-
-    proveedor.nombre = nombre.trim();
-    await proveedor.save();
-
-    res.json(proveedor);
-  } catch (error) {
-    res.status(500).json({ message: 'Error al actualizar proveedor' });
-  }
-};
-
-/**
- * PATCH /api/proveedores/:id/activar
- * body: { activo: boolean }
- */
-export const toggleProveedorActivo = async (
+export const listarProveedoresController = async (
   req: Request,
   res: Response
 ) => {
   try {
-    const { id } = req.params;
-    const { activo } = req.body;
+
+    const user = req.user
+
+    if (!user) {
+      return res
+        .status(401)
+        .json({ message: 'No autenticado' })
+    }
+
+    if (user.rol !== 'ADMIN') {
+      return res
+        .status(403)
+        .json({ message: 'No autorizado' })
+    }
+
+    const { search, activo } = req.query
+
+    const result = await listarProveedores({
+      search: search as string | undefined,
+      activo:
+        activo !== undefined
+          ? activo === 'true'
+          : undefined,
+    })
+
+    res.set('Cache-Control', 'no-store')
+    return res.json(result)
+
+  } catch (e: any) {
+    return res
+      .status(400)
+      .json({ message: e.message })
+  }
+}
+
+/* =====================================================
+   CREAR PROVEEDOR
+===================================================== */
+
+export const crearProveedorController = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+
+    const user = req.user
+
+    if (!user) {
+      return res
+        .status(401)
+        .json({ message: 'No autenticado' })
+    }
+
+    if (user.rol !== 'ADMIN') {
+      return res
+        .status(403)
+        .json({ message: 'No autorizado' })
+    }
+
+    const { nombre } = req.body
+
+    const proveedor = await crearProveedor({
+      nombre,
+    })
+
+    return res.status(201).json(proveedor)
+
+  } catch (e: any) {
+    return res
+      .status(400)
+      .json({ message: e.message })
+  }
+}
+
+/* =====================================================
+   ACTUALIZAR PROVEEDOR
+===================================================== */
+
+export const actualizarProveedorController = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+
+    const user = req.user
+
+    if (!user) {
+      return res
+        .status(401)
+        .json({ message: 'No autenticado' })
+    }
+
+    if (user.rol !== 'ADMIN') {
+      return res
+        .status(403)
+        .json({ message: 'No autorizado' })
+    }
+
+    const { id } = req.params
+    const { nombre } = req.body
+
+    if (!Types.ObjectId.isValid(id)) {
+      return res
+        .status(400)
+        .json({ message: 'ID inválido' })
+    }
+
+    const proveedor = await actualizarProveedor({
+      proveedorId: new Types.ObjectId(id),
+      nombre,
+    })
+
+    return res.json(proveedor)
+
+  } catch (e: any) {
+    return res
+      .status(400)
+      .json({ message: e.message })
+  }
+}
+
+/* =====================================================
+   TOGGLE ACTIVO
+===================================================== */
+
+export const toggleProveedorActivoController = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+
+    const user = req.user
+
+    if (!user) {
+      return res
+        .status(401)
+        .json({ message: 'No autenticado' })
+    }
+
+    if (user.rol !== 'ADMIN') {
+      return res
+        .status(403)
+        .json({ message: 'No autorizado' })
+    }
+
+    const { id } = req.params
+    const { activo } = req.body
+
+    if (!Types.ObjectId.isValid(id)) {
+      return res
+        .status(400)
+        .json({ message: 'ID inválido' })
+    }
 
     if (typeof activo !== 'boolean') {
       return res
         .status(400)
-        .json({ message: 'Campo activo inválido' });
+        .json({ message: 'Campo activo inválido' })
     }
 
-    const proveedor = await ProveedorModel.findById(id);
+    const proveedor = await toggleProveedorActivo({
+      proveedorId: new Types.ObjectId(id),
+      activo,
+    })
 
-    if (!proveedor) {
-      return res.status(404).json({ message: 'Proveedor no encontrado' });
-    }
+    return res.json(proveedor)
 
-    proveedor.activo = activo;
-    await proveedor.save();
-
-    res.json(proveedor);
-  } catch (error) {
-    res.status(500).json({ message: 'Error al actualizar estado' });
+  } catch (e: any) {
+    return res
+      .status(400)
+      .json({ message: e.message })
   }
-};
+}

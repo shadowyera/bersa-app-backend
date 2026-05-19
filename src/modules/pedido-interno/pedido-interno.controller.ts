@@ -48,9 +48,13 @@ export async function crearPedido(
     }
 
     const pedido = await crearPedidoInternoUsecase({
-      sucursalSolicitanteId: req.user!.sucursalId,
+      sucursalSolicitanteId:
+        req.user!.sucursal.id,
+
       sucursalAbastecedoraId,
+
       items,
+
       usuarioId: req.user!._id,
     })
 
@@ -85,7 +89,9 @@ export async function editarPedido(
 
     const pedido = await editarPedidoInterno(
       req.params.id,
-      req.user!.sucursalId,
+
+      req.user!.sucursal.id,
+
       items
     )
 
@@ -111,7 +117,8 @@ export async function cancelarPedido(
   try {
     const pedido = await cancelarPedidoInterno(
       req.params.id,
-      req.user!.sucursalId
+
+      req.user!.sucursal.id
     )
 
     return res.json(
@@ -134,9 +141,10 @@ export async function listarPedidosPropios(
   res: Response
 ) {
   try {
-    const pedidos = await getPedidosPorSolicitante(
-      req.user!.sucursalId
-    )
+    const pedidos =
+      await getPedidosPorSolicitante(
+        req.user!.sucursal.id
+      )
 
     return res.json(
       serializePedidosInternos(pedidos)
@@ -158,9 +166,10 @@ export async function listarPedidosRecibidos(
   res: Response
 ) {
   try {
-    const pedidos = await getPedidosPorAbastecedora(
-      req.user!.sucursalId
-    )
+    const pedidos =
+      await getPedidosPorAbastecedora(
+        req.user!.sucursal.id
+      )
 
     return res.json(
       serializePedidosInternos(pedidos)
@@ -190,12 +199,17 @@ export async function prepararPedido(
       })
     }
 
-    const pedido = await prepararPedidoInternoUsecase({
-      pedidoId: req.params.id,
-      itemsPreparados: items,
-      sucursalAbastecedoraId: req.user!.sucursalId,
-      usuarioId: req.user!._id,
-    })
+    const pedido =
+      await prepararPedidoInternoUsecase({
+        pedidoId: req.params.id,
+
+        itemsPreparados: items,
+
+        sucursalAbastecedoraId:
+          req.user!.sucursal.id,
+
+        usuarioId: req.user!._id,
+      })
 
     return res.json(
       serializePedidoInterno(pedido)

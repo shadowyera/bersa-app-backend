@@ -84,7 +84,7 @@ export interface Movimiento {
   /** Observación libre */
   observacion?: string
 
-  /** Fecha efectiva */
+  /** Fecha efectiva del movimiento */
   fecha: Date
 
   /** Auditoría técnica */
@@ -101,28 +101,24 @@ const MovimientoSchema = new Schema<Movimiento>(
       type: String,
       enum: Object.values(TIPO_MOVIMIENTO),
       required: true,
-      index: true,
     },
 
     subtipoMovimiento: {
       type: String,
       enum: Object.values(SUBTIPO_MOVIMIENTO),
       required: true,
-      index: true,
     },
 
     productoId: {
       type: Schema.Types.ObjectId,
       ref: 'Producto',
       required: true,
-      index: true,
     },
 
     sucursalId: {
       type: Schema.Types.ObjectId,
       ref: 'Sucursal',
       required: true,
-      index: true,
     },
 
     cantidad: {
@@ -139,7 +135,6 @@ const MovimientoSchema = new Schema<Movimiento>(
     saldoPosterior: {
       type: Number,
       required: true,
-      index: true,
     },
 
     referencia: {
@@ -161,7 +156,6 @@ const MovimientoSchema = new Schema<Movimiento>(
       type: Date,
       required: true,
       default: Date.now,
-      index: true,
     },
   },
   {
@@ -170,14 +164,43 @@ const MovimientoSchema = new Schema<Movimiento>(
 )
 
 /* =====================================================
-   ÍNDICES IMPORTANTES
+   ÍNDICES IMPORTANTES (KARDEX)
 ===================================================== */
 
-// Consulta rápida por producto en kardex
-MovimientoSchema.index({ productoId: 1, fecha: -1 })
+/**
+ * Kardex por producto dentro de una sucursal
+ * consulta típica:
+ * productoId + sucursalId + orden cronológico
+ */
+MovimientoSchema.index({
+  productoId: 1,
+  sucursalId: 1,
+  fecha: -1,
+})
 
-// Consulta por sucursal + fecha (reportes)
-MovimientoSchema.index({ sucursalId: 1, fecha: -1 })
+/**
+ * Movimientos por sucursal
+ * usado para reportes y auditoría
+ */
+MovimientoSchema.index({
+  sucursalId: 1,
+  fecha: -1,
+})
+
+/**
+ * Listado global de movimientos
+ */
+MovimientoSchema.index({
+  fecha: -1,
+})
+
+/**
+ * Filtro por tipo de movimiento
+ */
+MovimientoSchema.index({
+  tipoMovimiento: 1,
+  fecha: -1,
+})
 
 /* =====================================================
    MODEL

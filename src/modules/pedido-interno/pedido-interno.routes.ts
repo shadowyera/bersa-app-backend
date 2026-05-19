@@ -1,4 +1,6 @@
 import { Router } from 'express'
+
+import { authMiddleware } from '../auth/auth.middleware'
 import { requireRole } from '../auth/requireRole'
 
 import {
@@ -19,6 +21,12 @@ import {
 } from './catalogo/catalogo-pedido.controller'
 
 const router = Router()
+
+/* =====================================================
+   AUTH
+===================================================== */
+
+router.use(authMiddleware)
 
 /* =====================================================
    PEDIDOS INTERNOS – QUERIES (LECTURA)

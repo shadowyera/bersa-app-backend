@@ -13,11 +13,18 @@ import {
    POST /api/movimientos
    Registrar movimiento de Kardex
 ===================================================== */
+/**
+ * ⚠ Uso interno del sistema.
+ * Normalmente los movimientos se generan desde
+ * servicios de negocio como ventas, abastecimientos
+ * o ajustes de inventario.
+ */
 export const createMovimiento = async (
   req: Request,
   res: Response
 ) => {
   try {
+
     const {
       tipoMovimiento,
       subtipoMovimiento,
@@ -29,7 +36,7 @@ export const createMovimiento = async (
     } = req.body
 
     /* ================================
-       Validaciones básicas de input
+       VALIDACIONES
     ================================ */
 
     if (
@@ -75,6 +82,7 @@ export const createMovimiento = async (
     }
 
     if (referencia) {
+
       if (
         !Object.values(REFERENCIA_MOVIMIENTO).includes(
           referencia.tipo
@@ -90,10 +98,11 @@ export const createMovimiento = async (
           message: 'referencia.id inválido',
         })
       }
+
     }
 
     /* ================================
-       Llamada al service (dominio)
+       SERVICE
     ================================ */
 
     const resultado = await registrarMovimiento({
@@ -104,64 +113,106 @@ export const createMovimiento = async (
       cantidad,
       referencia: referencia
         ? {
-            tipo: referencia.tipo,
-            id: new Types.ObjectId(referencia.id),
-          }
+          tipo: referencia.tipo,
+          id: new Types.ObjectId(referencia.id),
+        }
         : undefined,
       observacion,
     })
-
-    /* ================================
-       Respuesta OK
-    ================================ */
 
     return res.status(201).json({
       message: 'Movimiento registrado correctamente',
       data: resultado,
     })
+
   } catch (error: any) {
+
     return res.status(400).json({
       message:
         error?.message ??
         'Error al registrar movimiento',
     })
+
   }
 }
 
 /* =====================================================
    GET /api/movimientos
-   Listar movimientos (Kardex)
+   GET /api/movimientos/sucursal/:sucursalId
+   GET /api/movimientos/producto/:productoId
 ===================================================== */
+
 export const getMovimientos = async (
   req: Request,
   res: Response
 ) => {
   try {
+
     const filter: any = {}
 
-    // filtros por params
-    if (req.params.productoId) {
-      filter.productoId = req.params.productoId
+    /* ================================
+       FILTROS
+    ================================ */
+
+    const {
+      productoId,
+      sucursalId,
+      tipoMovimiento,
+    } = req.query
+
+    if (productoId) {
+
+      if (!Types.ObjectId.isValid(productoId as string)) {
+        return res.status(400).json({
+          message: 'productoId inválido',
+        })
+      }
+
+      filter.productoId = productoId
     }
 
-    if (req.params.sucursalId) {
-      filter.sucursalId = req.params.sucursalId
+    if (sucursalId) {
+
+      if (!Types.ObjectId.isValid(sucursalId as string)) {
+        return res.status(400).json({
+          message: 'sucursalId inválido',
+        })
+      }
+
+      filter.sucursalId = sucursalId
     }
 
-    // paginación
-    const page = Number(req.query.page ?? 1)
-    const limit = Number(req.query.limit ?? 10)
+    if (tipoMovimiento) {
+      filter.tipoMovimiento = tipoMovimiento
+    }
+
+    /* ================================
+       PAGINACIÓN
+    ================================ */
+
+    const page = Math.max(1, Number(req.query.page ?? 1))
+    const limit = Math.max(1, Number(req.query.limit ?? 10))
     const skip = (page - 1) * limit
 
-    const [movimientos, total] =
-      await Promise.all([
-        MovimientoModel.find(filter)
-          .sort({ fecha: -1 }) // más nuevo primero
-          .skip(skip)
-          .limit(limit),
+    /* ================================
+       QUERY
+    ================================ */
 
-        MovimientoModel.countDocuments(filter),
-      ])
+    const [movimientos, total] = await Promise.all([
+
+      MovimientoModel.find(filter)
+        .sort({ fecha: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+
+      MovimientoModel.countDocuments(filter),
+
+    ])
+
+    /* ================================
+       RESPUESTA
+    ================================ */
 
     return res.json({
       data: movimientos,
@@ -169,9 +220,12 @@ export const getMovimientos = async (
       page,
       limit,
     })
+
   } catch (error) {
+
     return res.status(500).json({
       message: 'Error al obtener movimientos',
     })
+
   }
 }

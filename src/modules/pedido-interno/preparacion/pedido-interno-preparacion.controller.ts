@@ -8,7 +8,7 @@ export async function obtenerPreparacionPedido(
   try {
     const data = await getPedidoPreparacion(
       req.params.id,
-      req.user!.sucursalId
+      req.user!.sucursal.id
     )
 
     return res.json(data)

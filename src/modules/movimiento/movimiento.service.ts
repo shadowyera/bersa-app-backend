@@ -34,7 +34,7 @@ interface RegistrarMovimientoInput {
 }
 
 /* =====================================================
-   REGISTRAR MOVIMIENTO (PRO + TRANSACCIONAL)
+   REGISTRAR MOVIMIENTO (TRANSACCIONAL)
 ===================================================== */
 
 export const registrarMovimiento = async (
@@ -74,11 +74,13 @@ export const registrarMovimiento = async (
        OBTENER STOCK
     ============================ */
 
-    const stock = await StockSucursalModel.findOne(
-      { productoId, sucursalId },
-      null,
-      { session: localSession }
-    )
+    const stock = await StockSucursalModel
+      .findOne(
+        { productoId, sucursalId },
+        null,
+        { session: localSession }
+      )
+      .lean()
 
     if (!stock) {
       throw new Error(
@@ -87,7 +89,6 @@ export const registrarMovimiento = async (
     }
 
     /**
-     * Regla:
      * Solo VENTA bloquea por habilitado
      */
     if (
@@ -99,6 +100,10 @@ export const registrarMovimiento = async (
         'Producto no habilitado para venta en esta sucursal'
       )
     }
+
+    /* ============================
+       CÁLCULO SALDOS
+    ============================ */
 
     const saldoAnterior = stock.cantidad
 
@@ -120,7 +125,7 @@ export const registrarMovimiento = async (
     }
 
     /* ============================
-       UPDATE ATÓMICO
+       UPDATE STOCK ATÓMICO
     ============================ */
 
     await StockSucursalModel.updateOne(
@@ -133,7 +138,7 @@ export const registrarMovimiento = async (
        CREAR MOVIMIENTO
     ============================ */
 
-    await MovimientoModel.create(
+    const movimiento = await MovimientoModel.create(
       [
         {
           tipoMovimiento,
@@ -152,7 +157,7 @@ export const registrarMovimiento = async (
     )
 
     /* ============================
-       COMMIT SOLO SI ES LOCAL
+       COMMIT
     ============================ */
 
     if (!externalSession) {
@@ -160,16 +165,7 @@ export const registrarMovimiento = async (
       localSession.endSession()
     }
 
-    return {
-      productoId,
-      sucursalId,
-      saldoAnterior,
-      saldoPosterior,
-      cantidad,
-      tipoMovimiento,
-      subtipoMovimiento,
-      referencia,
-    }
+    return movimiento[0]
 
   } catch (error) {
 
